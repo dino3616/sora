@@ -29,9 +29,36 @@ pub struct PartPlan {
     /// ヒューマナイズ設定。省略時は適用しない
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub humanize: Option<Humanize>,
+    /// CC オートメーションレーン。キースイッチで表現できない連続制御用
+    /// (例: Heavier7Strings のパームミュートは CC16(P.M. mix)で制御する)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<CcLane>,
     /// フレーズ設計の音楽的説明(なぜこう作ったか)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design_notes: Option<String>,
+}
+
+/// 単一 CC の時間変化(オートメーションレーン)。
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CcLane {
+    /// CC 番号(0-127)。Device Profile の cc_map に定義されているものを推奨
+    pub cc: u8,
+    /// 用途の覚書(任意。例: "palm mute mix")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    /// 制御点列(時間順)
+    pub points: Vec<CcPoint>,
+}
+
+/// CC 制御点。
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CcPoint {
+    /// 位置 "bar.beat.tick"
+    pub at: String,
+    /// CC 値(0-127)
+    pub value: u8,
 }
 
 fn default_ppq() -> u32 {

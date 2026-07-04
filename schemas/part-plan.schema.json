@@ -1,5 +1,59 @@
 {
   "$defs": {
+    "CcLane": {
+      "additionalProperties": false,
+      "description": "単一 CC の時間変化(オートメーションレーン)。",
+      "properties": {
+        "cc": {
+          "description": "CC 番号(0-127)。Device Profile の cc_map に定義されているものを推奨",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "function": {
+          "description": "用途の覚書(任意。例: \"palm mute mix\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "points": {
+          "description": "制御点列(時間順)",
+          "items": {
+            "$ref": "#/$defs/CcPoint"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cc",
+        "points"
+      ],
+      "type": "object"
+    },
+    "CcPoint": {
+      "additionalProperties": false,
+      "description": "CC 制御点。",
+      "properties": {
+        "at": {
+          "description": "位置 \"bar.beat.tick\"",
+          "type": "string"
+        },
+        "value": {
+          "description": "CC 値(0-127)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "at",
+        "value"
+      ],
+      "type": "object"
+    },
     "Humanize": {
       "additionalProperties": false,
       "description": "ヒューマナイズ設定。seed 必須 — 同一 Plan + 同一 Profile から\nバイト同一の .mid を再現するため(技術要件書 §4.4)。",
@@ -160,6 +214,13 @@
       "description": "テンポ(BPM)",
       "format": "double",
       "type": "number"
+    },
+    "controls": {
+      "description": "CC オートメーションレーン。キースイッチで表現できない連続制御用\n(例: Heavier7Strings のパームミュートは CC16(P.M. mix)で制御する)",
+      "items": {
+        "$ref": "#/$defs/CcLane"
+      },
+      "type": "array"
     },
     "design_notes": {
       "description": "フレーズ設計の音楽的説明(なぜこう作ったか)",

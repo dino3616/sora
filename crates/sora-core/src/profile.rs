@@ -25,6 +25,8 @@ pub struct ResolvedProfile {
     pub keyswitches: BTreeMap<String, ResolvedKeyswitch>,
     /// kit_piece ID → ノート
     pub drum_map: BTreeMap<String, ResolvedDrumPiece>,
+    /// CC 番号 → safe_range(未定義なら None)。CC レーン検証に使う
+    pub cc_map: BTreeMap<u8, Option<[u8; 2]>>,
     pub polyphony: Polyphony,
     /// 出力チャンネル(0 始まり)
     pub midi_channel: u8,
@@ -205,6 +207,7 @@ impl ResolvedProfile {
             });
         }
 
+        let mut cc_map: BTreeMap<u8, Option<[u8; 2]>> = BTreeMap::new();
         for (i, cc) in profile.cc_map.iter().enumerate() {
             if cc.cc > 127 {
                 issues.push(ValidationIssue {
@@ -224,6 +227,7 @@ impl ResolvedProfile {
                     hint: None,
                 });
             }
+            cc_map.insert(cc.cc, cc.safe_range);
         }
 
         if !issues.is_empty() {
@@ -242,6 +246,7 @@ impl ResolvedProfile {
             note_range,
             keyswitches,
             drum_map,
+            cc_map,
             polyphony: profile.polyphony,
             midi_channel,
             keyswitch_lead_ticks: profile

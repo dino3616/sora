@@ -69,6 +69,13 @@ struct KeyswitchEvent {
     note: MidiNote,
 }
 
+/// CC イベント(解決済み)。
+struct CcEvent {
+    at: u64,
+    cc: u8,
+    value: u8,
+}
+
 /// Part Plan を SMF へコンパイルする。
 ///
 /// L3 検証(音域・奏法・時間位置の相互制約)はここで全件列挙され、
@@ -286,6 +293,76 @@ pub fn compile(plan: &PartPlan, profile: &DeviceProfile) -> Result<CompileOutput
         }
     }
 
+    // CC オートメーションレーン(パームミュート量など、キースイッチで表現できない連続制御)
+    let mut cc_events: Vec<CcEvent> = Vec::new();
+    for (li, lane) in plan.controls.iter().enumerate() {
+        let lane_ptr = format!("/controls/{li}");
+        if lane.cc > 127 {
+            push_issue(
+                &mut issues,
+                &format!("{lane_ptr}/cc"),
+                "INVALID_CC_NUMBER",
+                &CoreError::InvalidVelocity { value: lane.cc },
+            );
+            continue;
+        }
+        // Profile の cc_map にない CC は警告(remap 可能なので許容)
+        let safe_range = match resolved.cc_map.get(&lane.cc) {
+            Some(sr) => *sr,
+            None => {
+                warnings.push(CompileWarning {
+                    code: "CC_NOT_IN_PROFILE".to_string(),
+                    message: format!(
+                        "CC {} is not in device `{}` cc_map — remap されている可能性があります",
+                        lane.cc, resolved.id
+                    ),
+                    pointer: Some(lane_ptr.clone()),
+                });
+                None
+            }
+        };
+        for (pi, point) in lane.points.iter().enumerate() {
+            let p_ptr = format!("{lane_ptr}/points/{pi}");
+            let at = match parse_position(&point.at, grid.beats_per_bar) {
+                Ok(p) => Some(p.to_absolute_ticks(grid.ticks_per_beat(), grid.beats_per_bar)),
+                Err(e) => {
+                    push_issue(&mut issues, &format!("{p_ptr}/at"), e.code(), &e);
+                    None
+                }
+            };
+            if point.value > 127 {
+                push_issue(
+                    &mut issues,
+                    &format!("{p_ptr}/value"),
+                    "INVALID_CC_VALUE",
+                    &CoreError::InvalidVelocity { value: point.value },
+                );
+            } else if let Some([min, max]) = safe_range
+                && (point.value < min || point.value > max)
+            {
+                issues.push(ValidationIssue {
+                    pointer: format!("{p_ptr}/value"),
+                    code: "CC_OUT_OF_SAFE_RANGE".to_string(),
+                    message: format!(
+                        "CC {} value {} outside safe_range {}..={}",
+                        lane.cc, point.value, min, max
+                    ),
+                    hint: Some(
+                        "Device Profile の safe_range 内に収めるか、明示的に範囲を広げてください"
+                            .to_string(),
+                    ),
+                });
+            }
+            if let Some(at) = at {
+                cc_events.push(CcEvent {
+                    at,
+                    cc: lane.cc,
+                    value: point.value,
+                });
+            }
+        }
+    }
+
     if !issues.is_empty() {
         return Err(CoreError::Validation { issues });
     }
@@ -386,7 +463,14 @@ pub fn compile(plan: &PartPlan, profile: &DeviceProfile) -> Result<CompileOutput
     }
 
     // イベント列へ変換して SMF を構築
-    let bytes = build_smf(plan, &grid, resolved.midi_channel, &notes, &keyswitches);
+    let bytes = build_smf(
+        plan,
+        &grid,
+        resolved.midi_channel,
+        &notes,
+        &keyswitches,
+        &cc_events,
+    );
     let end_tick = notes
         .iter()
         .map(|n| n.start + n.duration)
@@ -432,12 +516,14 @@ fn transpose_hint(note: MidiNote, low: MidiNote, high: MidiNote) -> Option<i8> {
     None
 }
 
-/// イベント種別の同 tick 内での順序(note off → keyswitch on → note on)。
+/// イベント種別の同 tick 内での順序(note off → CC → keyswitch on → note on)。
+/// CC はノート発音前に確定させたいので keyswitch/note on より前。
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum EventClass {
     NoteOff = 0,
-    KeyswitchOn = 1,
-    NoteOn = 2,
+    ControlChange = 1,
+    KeyswitchOn = 2,
+    NoteOn = 3,
 }
 
 fn build_smf(
@@ -446,9 +532,21 @@ fn build_smf(
     channel: u8,
     notes: &[ResolvedNote],
     keyswitches: &[KeyswitchEvent],
+    cc_events: &[CcEvent],
 ) -> Vec<u8> {
     // (abs_tick, class, note) → 決定論的順序
     let mut events: Vec<(u64, EventClass, u8, MidiMessage)> = Vec::new();
+    for cc in cc_events {
+        events.push((
+            cc.at,
+            EventClass::ControlChange,
+            cc.cc,
+            MidiMessage::Controller {
+                controller: u7::new(cc.cc),
+                value: u7::new(cc.value),
+            },
+        ));
+    }
     for n in notes {
         events.push((
             n.start,
@@ -676,6 +774,114 @@ mod tests {
         let b3 = compile(&p3, &prof).unwrap().bytes;
         assert_eq!(b1, b2, "same seed → byte-identical");
         assert_ne!(b1, b3, "different seed → different bytes");
+    }
+
+    fn cc_profile() -> DeviceProfile {
+        parse_validated(&json!({
+            "schema_version": "1.0",
+            "id": "heavier7strings",
+            "name": "Heavier7Strings",
+            "device_type": "instrument",
+            "roles": ["rhythm_guitar"],
+            "octave_convention": "C3=60",
+            "note_range": { "low": "A0", "high": "E5" },
+            "cc_map": [
+                { "cc": 16, "function": "palm mute mix", "safe_range": [0, 127], "confidence": "manual" }
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn cc_lane_emits_controller_events() {
+        let plan: PartPlan = parse_validated(&json!({
+            "schema_version": "1.0",
+            "part_id": "pm-riff",
+            "device": "heavier7strings",
+            "bpm": 150.0,
+            "time_signature": "4/4",
+            "controls": [
+                { "cc": 16, "function": "palm mute mix", "points": [
+                    { "at": "1.1.000", "value": 100 },
+                    { "at": "2.1.000", "value": 20 }
+                ]}
+            ],
+            "sections": [{ "label": "verse", "start_bar": 1, "phrases": [{ "notes": [
+                { "pitch": "E1", "start": "1.1.000", "duration": "0.0.240", "velocity": 110 }
+            ]}]}]
+        }))
+        .unwrap();
+        let out = compile(&plan, &cc_profile()).unwrap();
+        let smf = Smf::parse(&out.bytes).unwrap();
+        let cc_count = smf.tracks[1]
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e.kind,
+                    TrackEventKind::Midi {
+                        message: MidiMessage::Controller { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(
+            cc_count, 2,
+            "two CC16 points should emit two controller events"
+        );
+    }
+
+    #[test]
+    fn cc_out_of_safe_range_errors() {
+        let plan: PartPlan = parse_validated(&json!({
+            "schema_version": "1.0",
+            "part_id": "bad-cc",
+            "device": "heavier7strings",
+            "bpm": 150.0,
+            "time_signature": "4/4",
+            "controls": [
+                { "cc": 16, "points": [ { "at": "1.1.000", "value": 200 } ] }
+            ],
+            "sections": [{ "label": "verse", "start_bar": 1, "phrases": [{ "notes": [
+                { "pitch": "E1", "start": "1.1.000", "duration": "0.0.240", "velocity": 110 }
+            ]}]}]
+        }))
+        .unwrap();
+        // value 200 は L2(0-127)で弾かれるか、コンパイル時に弾かれる
+        let err = compile(&plan, &cc_profile()).unwrap_err();
+        let CoreError::Validation { issues } = err else {
+            panic!()
+        };
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.pointer.contains("/controls/0/points/0/value"))
+        );
+    }
+
+    #[test]
+    fn cc_not_in_profile_warns() {
+        let plan: PartPlan = parse_validated(&json!({
+            "schema_version": "1.0",
+            "part_id": "unknown-cc",
+            "device": "heavier7strings",
+            "bpm": 150.0,
+            "time_signature": "4/4",
+            "controls": [
+                { "cc": 99, "points": [ { "at": "1.1.000", "value": 64 } ] }
+            ],
+            "sections": [{ "label": "verse", "start_bar": 1, "phrases": [{ "notes": [
+                { "pitch": "E1", "start": "1.1.000", "duration": "0.0.240", "velocity": 110 }
+            ]}]}]
+        }))
+        .unwrap();
+        let out = compile(&plan, &cc_profile()).unwrap();
+        assert!(
+            out.report
+                .warnings
+                .iter()
+                .any(|w| w.code == "CC_NOT_IN_PROFILE")
+        );
     }
 
     #[test]
