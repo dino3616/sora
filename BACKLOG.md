@@ -18,7 +18,7 @@
 - M3: sora-audio(loudness/spectrum/compare)、AutomationPlan スキーマ、genre-targets ✅(残: tone/master ワークフロー doc)
 - 次の大物: **M4 MCP サーバー + 仮想 MIDI(midir)**。実装は自己完結だが実機ルーティング確認に IAC Driver 設定が要る。
 
-**M4 仮想 MIDI まで完了。次: MCP サーバー(rmcp)。ユーザー確認待ち → 「未決事項」参照。**
+**M4 仮想 MIDI まで完了。実 Device Profile を2つ作成(H7S 実機確認済み / Ozone 9 は Web ドキュメント読解のみ)。次: MCP サーバー(rmcp)。**
 
 ## 実環境メモ(ユーザー PC・実態確認可能)
 
@@ -77,13 +77,20 @@ sora-cli:
 - [x] drum_map コンパイル(kit_piece 解決、ch10 既定)
 - [x] エフェクト系 Profile スキーマ(parameters / safe_range / automation_target)
 - [x] マニュアル読解 → Profile 起草の Agent ワークフローを CLAUDE.md に追記
-- [x] Heavier7Strings 実 Profile 作成(マニュアル 1.7.0 読解、`~/Documents/Heavier7Strings/sora-project/devices/`、confidence: manual)+ validate + verify.mid 生成
+- [x] Heavier7Strings 実 Profile 作成(マニュアル 1.7.0 読解、`~/Documents/Heavier7Strings/sora-project/devices/`)+ validate + verify.mid 生成
 - [x] CC レーン対応(Part Plan `controls`): H7S のパームミュート=CC16 のように連続 CC 型奏法を表現。実 Profile で CC16 パームミュートリフのコンパイル確認済み
-- [ ] 【要ユーザー】H7S verify.mid を Studio One 5 で実機確認 → confidence 昇格。CC16 パームミュートの効きも確認
-- [ ] 【要ユーザー】MODO BASS / MODO DRUM / AmpliTube 5 / Ozone 9 のマニュアル所在 → 実 Profile 作成
+- [x] 【ユーザー確認済み】H7S verify.mid + palm-riff.mid + one-key-fifth-ab.mid を Studio One 5 で実機確認 → 音域・4キースイッチ・CC16・CC26 を confidence: verified に更新
+- [x] Ozone 9 実 Profile 作成(公式 Web ドキュメント読解、`~/Documents/Sora/devices/ozone9.profile.json`、confidence: manual、Dynamics ratio 2件は unverified)
+- [ ] 【要ユーザー】Ozone 9 の実機確認(特に Dynamics ratio の値域、多数の safe_range 未確定パラメータ)
+- [ ] 【要ユーザー】MODO BASS / MODO DRUM / AmpliTube 5 のマニュアル所在 → 実 Profile 作成
 - [ ] missing_context 機構: references/context-requirements.json + レポート警告(§4.3)
 
-**メモ**: 実 Profile は著作権配慮(§16 リスク4)で公開リポジトリに置かず、ユーザーの `~/Documents/Heavier7Strings/sora-project/` に配置。
+**メモ**: 実 Profile は著作権配慮(§16 リスク4)で公開リポジトリに置かず、ユーザーのローカル(`~/Documents/Heavier7Strings/sora-project/`, `~/Documents/Sora/devices/`)に配置。
+
+**この作業で見つかったコード側のギャップ(修正済み)**:
+- Part Plan に CC レーン(`controls`)が無く、CC 中心の奏法(H7S のパームミュート等)を表現できなかった → 追加
+- `DeviceProfile.octave_convention` が全デバイス必須だった → マスタリング等、音程を扱わない effect(Ozone)には無意味な値を強制していた → note_range/keyswitches/drum_map があるときのみ必須に変更
+- `profile validate` が keyswitches の unverified しか見ておらず、effect の parameters の unverified を見落としていた → 両方見るように修正
 
 ## Milestone 3: オーディオ解析 + トーン/マスタリングプラン(§15 M3)
 
