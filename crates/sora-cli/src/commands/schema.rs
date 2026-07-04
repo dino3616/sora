@@ -8,6 +8,20 @@ use sora_core::schema::dump_all;
 
 use crate::output::CmdResult;
 
+#[derive(clap::Subcommand)]
+pub enum SchemaCommand {
+    /// Rust 型から JSON Schema を生成する(--out で書き出し、--check でドリフト検査)
+    Dump(SchemaArgs),
+}
+
+impl SchemaCommand {
+    pub fn run(self) -> CmdResult {
+        match self {
+            SchemaCommand::Dump(a) => a.run(),
+        }
+    }
+}
+
 #[derive(clap::Args)]
 pub struct SchemaArgs {
     /// 出力ディレクトリ(省略時は stdout に JSON 集約を返す)
@@ -19,7 +33,7 @@ pub struct SchemaArgs {
 }
 
 impl SchemaArgs {
-    pub fn run(self) -> CmdResult {
+    fn run(self) -> CmdResult {
         let schemas = dump_all();
 
         // --out なし: stdout に集約

@@ -29,7 +29,8 @@ enum Command {
     #[command(subcommand)]
     Profile(commands::profile::ProfileCommand),
     /// JSON Schema の出力・ドリフト検査
-    Schema(commands::schema::SchemaArgs),
+    #[command(subcommand)]
+    Schema(commands::schema::SchemaCommand),
     /// 環境設定の変更(control level 等)
     #[command(subcommand)]
     Config(commands::config::ConfigCommand),
@@ -47,7 +48,7 @@ fn main() -> ExitCode {
     let result: CmdResult = match cli.command {
         Command::Midi(cmd) => cmd.run(),
         Command::Profile(cmd) => cmd.run(),
-        Command::Schema(args) => args.run(),
+        Command::Schema(cmd) => cmd.run(),
         Command::Config(cmd) => cmd.run(),
         Command::Init(args) => args.run(),
         Command::Version(cmd) => cmd.run(),
