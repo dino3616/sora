@@ -45,13 +45,28 @@ impl ValidateArgs {
         let resolved = ResolvedProfile::resolve(&profile)
             .with_context(|| format!("resolving {}", self.profile.display()))?;
 
-        // 確信度の集計(unverified があれば実機確認を促す)
-        let unverified: Vec<&str> = profile
+        // 確信度の集計(unverified があれば実機確認を促す)。
+        // instrument は articulation(キースイッチ)、effect は parameters を対象にする。
+        let unverified_articulations: Vec<&str> = profile
             .keyswitches
             .iter()
             .filter(|k| matches!(k.confidence, sora_core::model::Confidence::Unverified))
             .map(|k| k.articulation.as_str())
             .collect();
+        let unverified_parameters: Vec<&str> = profile
+            .parameters
+            .iter()
+            .filter(|p| matches!(p.confidence, sora_core::model::Confidence::Unverified))
+            .map(|p| p.name.as_str())
+            .collect();
+
+        let mut hints = Vec::new();
+        if !unverified_articulations.is_empty() {
+            hints.push("unverified な奏法があります。`sora profile verify-midi` で実機確認し confidence を verified へ更新してください");
+        }
+        if !unverified_parameters.is_empty() {
+            hints.push("unverified なパラメータがあります。実機で値域・挙動を確認し confidence を verified へ更新してください");
+        }
 
         Ok(json!({
             "valid": true,
@@ -60,12 +75,10 @@ impl ValidateArgs {
             "octave_convention": profile.octave_convention,
             "keyswitch_count": resolved.keyswitches.len(),
             "drum_piece_count": resolved.drum_map.len(),
-            "unverified_articulations": unverified,
-            "hint": if unverified.is_empty() {
-                serde_json::Value::Null
-            } else {
-                json!("unverified な奏法があります。`sora profile verify-midi` で実機確認し confidence を verified へ更新してください")
-            }
+            "parameter_count": profile.parameters.len(),
+            "unverified_articulations": unverified_articulations,
+            "unverified_parameters": unverified_parameters,
+            "hint": if hints.is_empty() { serde_json::Value::Null } else { json!(hints.join(" / ")) }
         }))
     }
 }
