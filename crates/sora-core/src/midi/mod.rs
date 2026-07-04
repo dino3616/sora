@@ -2,12 +2,14 @@
 
 mod analyze;
 mod compile;
+mod decompile;
 mod inspect;
 mod timing;
 mod verify;
 
 pub use analyze::*;
 pub use compile::*;
+pub use decompile::*;
 pub use inspect::*;
 pub use timing::*;
 pub use verify::*;

@@ -21,6 +21,8 @@ pub enum MidiCommand {
     Inspect(InspectArgs),
     /// SMF を解析し、BPM/調性中心/リズム統計を推定する
     Analyze(AnalyzeArgs),
+    /// SMF を Part Plan へ逆コンパイルする(キースイッチを articulation へ逆解決)
+    Decompile(DecompileArgs),
 }
 
 impl MidiCommand {
@@ -29,6 +31,7 @@ impl MidiCommand {
             MidiCommand::Compile(a) => a.run(),
             MidiCommand::Inspect(a) => a.run(),
             MidiCommand::Analyze(a) => a.run(),
+            MidiCommand::Decompile(a) => a.run(),
         }
     }
 }
@@ -103,6 +106,53 @@ impl AnalyzeArgs {
         let analysis = midi::analyze_file(&self.file)
             .with_context(|| format!("analyzing {}", self.file.display()))?;
         Ok(serde_json::to_value(analysis)?)
+    }
+}
+
+#[derive(clap::Args)]
+pub struct DecompileArgs {
+    /// SMF ファイルのパス
+    file: PathBuf,
+    /// 対象デバイス ID(profile 解決に使用)
+    #[arg(long)]
+    device: String,
+    /// Device Profile JSON のパス(省略時は sora.config.json から device を解決)
+    #[arg(long)]
+    profile: Option<PathBuf>,
+    /// 生成 Part Plan の part_id(省略時はファイル名から)
+    #[arg(long)]
+    part_id: Option<String>,
+    /// 出力 .plan.json のパス(省略時は stdout の plan フィールドのみ)
+    #[arg(long)]
+    out: Option<PathBuf>,
+    /// 参照する sora.config.json(既定: ./sora.config.json)
+    #[arg(long)]
+    config: Option<PathBuf>,
+}
+
+impl DecompileArgs {
+    fn run(self) -> CmdResult {
+        let profile = resolve_profile(
+            &self.device,
+            self.profile.as_deref(),
+            self.config.as_deref(),
+        )
+        .with_context(|| format!("resolving profile for device `{}`", self.device))?;
+        let part_id = self.part_id.unwrap_or_else(|| {
+            self.file
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "decompiled".to_string())
+        });
+        let output = midi::decompile_file(&self.file, &profile, &part_id)
+            .with_context(|| format!("decompiling {}", self.file.display()))?;
+
+        if let Some(out_path) = self.out {
+            let json = serde_json::to_string_pretty(&output.plan)? + "\n";
+            write_new_file(&out_path, json.as_bytes())?;
+            return Ok(json!({ "output": out_path, "summary": output.summary }));
+        }
+        Ok(json!({ "plan": output.plan, "summary": output.summary }))
     }
 }
 

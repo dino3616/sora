@@ -66,7 +66,7 @@ pub struct NoteStats {
     pub pitch_class_histogram: [f64; 12],
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct NoteDump {
     pub tick: u64,
     pub duration: u64,
