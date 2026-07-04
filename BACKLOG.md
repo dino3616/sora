@@ -82,15 +82,21 @@ sora-cli:
 - [x] 【ユーザー確認済み】H7S verify.mid + palm-riff.mid + one-key-fifth-ab.mid を Studio One 5 で実機確認 → 音域・4キースイッチ・CC16・CC26 を confidence: verified に更新
 - [x] Ozone 9 実 Profile 作成(公式 Web ドキュメント読解、`~/Documents/Sora/devices/ozone9.profile.json`、confidence: manual、Dynamics ratio 2件は unverified)
 - [ ] 【要ユーザー】Ozone 9 の実機確認(特に Dynamics ratio の値域、多数の safe_range 未確定パラメータ)
-- [ ] 【要ユーザー】MODO BASS / MODO DRUM / AmpliTube 5 のマニュアル所在 → 実 Profile 作成
+- [x] AmpliTube 5 実 Profile 作成(マニュアル読解 + プリセット776件の実測 + MidiAssignments 実例調査、`~/Documents/Sora/devices/amplitube5.profile.json`)。固定 CC マップが無いこと・Program Change でプリセット丸ごと切替・DAW Automation は Param1-16 固定スロットであることを実データで確認
+- [x] Program Change 対応の実証: 「Metal→Warm Clean 2小節遷移」プロンプトに対する実出力を生成・バイトレベルで検証(`~/Documents/Sora/exports/metal-to-warm-clean.{plan.json,mid}` + 手順書 `tone/amplitube-transition-plan.md`)
+- [ ] 【要ユーザー】AmpliTube 実機で MIDI Learn 設定後、`metal-to-warm-clean.mid` の実際の音の変化を確認
+- [ ] 【要ユーザー】MODO BASS / MODO DRUM のマニュアル所在 → 実 Profile 作成
 - [ ] missing_context 機構: references/context-requirements.json + レポート警告(§4.3)
 
-**メモ**: 実 Profile は著作権配慮(§16 リスク4)で公開リポジトリに置かず、ユーザーのローカル(`~/Documents/Heavier7Strings/sora-project/`, `~/Documents/Sora/devices/`)に配置。
+**メモ**: 実 Profile は著作権配慮(§16 リスク4)で公開リポジトリに置かず、ユーザーのローカル(`~/Documents/Heavier7Strings/sora-project/`, `~/Documents/Sora/`)に配置。
 
 **この作業で見つかったコード側のギャップ(修正済み)**:
 - Part Plan に CC レーン(`controls`)が無く、CC 中心の奏法(H7S のパームミュート等)を表現できなかった → 追加
 - `DeviceProfile.octave_convention` が全デバイス必須だった → マスタリング等、音程を扱わない effect(Ozone)には無意味な値を強制していた → note_range/keyswitches/drum_map があるときのみ必須に変更
 - `profile validate` が keyswitches の unverified しか見ておらず、effect の parameters の unverified を見落としていた → 両方見るように修正
+- Part Plan に Program Change が無く、「プリセット全体の切替」(AmpliTube 等)を表現できなかった → `program_changes` を追加。ノートを持たない effect 専用 Plan(controls/program_changes のみ)も compile 可能なことを確認
+
+**AmpliTube の重要な学び**: H7S(固定デフォルト CC マップ)や Ozone(パラメータ一覧はマニュアル記載)と異なり、AmpliTube は**CC/DAW オートメーションの割当そのものがユーザーのその場限りの GUI 操作に依存**する。Sora が生成する CC/PC 入り MIDI は、ユーザーが AmpliTube 側で一度 MIDI Learn / Program Change 割当をしない限り無音のまま(壊れているのではなく仕様どおり)。この種のデバイスでは Plan 単体でなく「Plan + 手順書」の対で出すことが必須と判明(tone/amplitube-transition-plan.md がそのパターン)。
 
 ## Milestone 3: オーディオ解析 + トーン/マスタリングプラン(§15 M3)
 
