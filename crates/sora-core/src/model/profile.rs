@@ -27,8 +27,11 @@ pub struct DeviceProfile {
     #[serde(default)]
     pub roles: Vec<String>,
     /// オクターブ表記基準。"C3=60" または "C4=60"。
-    /// ベンダー間で不統一のため宣言必須 — 曖昧だとキースイッチが全部ずれる。
-    pub octave_convention: String,
+    /// ベンダー間で不統一のため、note_range・keyswitches・drum_map のいずれかを
+    /// 定義する場合は宣言必須(曖昧だとキースイッチが全部ずれる)。
+    /// マスタリング/EQ 等、音程を扱わない effect デバイスでは省略できる。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub octave_convention: Option<String>,
     /// 演奏可能音域(instrument のみ)。キースイッチはこの外側に置く。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_range: Option<NoteRange>,

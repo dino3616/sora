@@ -51,11 +51,30 @@ impl ResolvedProfile {
     pub fn resolve(profile: &DeviceProfile) -> Result<Self, CoreError> {
         let mut issues: Vec<ValidationIssue> = Vec::new();
 
-        let convention: OctaveConvention = match profile.octave_convention.parse() {
-            Ok(c) => c,
-            Err(e) => {
-                issues.push(issue("/octave_convention", &e));
-                // 以降のノート解決のために暫定値で続行(エラーは既に記録済み)
+        // 音程を扱う定義(note_range/keyswitches/drum_map)がある場合のみ必須
+        let needs_convention = profile.note_range.is_some()
+            || !profile.keyswitches.is_empty()
+            || profile.drum_map.as_ref().is_some_and(|d| !d.is_empty());
+
+        let convention: OctaveConvention = match &profile.octave_convention {
+            Some(s) => match s.parse() {
+                Ok(c) => c,
+                Err(e) => {
+                    issues.push(issue("/octave_convention", &e));
+                    // 以降のノート解決のために暫定値で続行(エラーは既に記録済み)
+                    OctaveConvention::C3Is60
+                }
+            },
+            None => {
+                if needs_convention {
+                    issues.push(ValidationIssue {
+                        pointer: "/octave_convention".to_string(),
+                        code: "MISSING_OCTAVE_CONVENTION".to_string(),
+                        message: "octave_convention is required when note_range, keyswitches, or drum_map are defined".to_string(),
+                        hint: Some("音程を扱う Profile には octave_convention(\"C3=60\" または \"C4=60\")の宣言が必要です".to_string()),
+                    });
+                }
+                // 音程を扱わない Profile(マスタリング等の effect)では未使用の暫定値
                 OctaveConvention::C3Is60
             }
         };
@@ -314,7 +333,7 @@ mod tests {
     #[test]
     fn multiple_issues_collected() {
         let mut profile = h7s_profile();
-        profile.octave_convention = "C5=60".to_string();
+        profile.octave_convention = Some("C5=60".to_string());
         profile.keyswitches[1].articulation = "palm_mute".to_string(); // 重複
         let err = ResolvedProfile::resolve(&profile).unwrap_err();
         let CoreError::Validation { issues } = err else {
@@ -340,5 +359,42 @@ mod tests {
         let resolved = ResolvedProfile::resolve(&profile).unwrap();
         assert_eq!(resolved.midi_channel, 9);
         assert_eq!(resolved.drum_map["kick"].note.value(), 36);
+    }
+
+    /// マスタリング系 effect(Ozone 等)は音程を扱わないため octave_convention 省略可。
+    #[test]
+    fn effect_profile_without_notes_does_not_require_octave_convention() {
+        let profile: DeviceProfile = parse_validated(&json!({
+            "schema_version": "1.0",
+            "id": "ozone9",
+            "name": "Ozone 9",
+            "device_type": "effect",
+            "roles": ["mastering"],
+            "parameters": [
+                { "name": "maximizer.ceiling", "unit": "dB", "safe_range": [-0.8, -0.3], "confidence": "manual" }
+            ]
+        }))
+        .unwrap();
+        let resolved = ResolvedProfile::resolve(&profile).unwrap();
+        assert!(resolved.note_range.is_none());
+        assert!(resolved.keyswitches.is_empty());
+    }
+
+    /// note_range を持つのに octave_convention が無い場合はエラー。
+    #[test]
+    fn octave_convention_required_when_note_range_present() {
+        let profile: DeviceProfile = parse_validated(&json!({
+            "schema_version": "1.0",
+            "id": "no-convention",
+            "name": "No Convention",
+            "device_type": "instrument",
+            "note_range": { "low": 0, "high": 127 }
+        }))
+        .unwrap();
+        let err = ResolvedProfile::resolve(&profile).unwrap_err();
+        let CoreError::Validation { issues } = err else {
+            panic!()
+        };
+        assert!(issues.iter().any(|i| i.code == "MISSING_OCTAVE_CONVENTION"));
     }
 }

@@ -393,8 +393,11 @@
       "description": "演奏可能音域(instrument のみ)。キースイッチはこの外側に置く。"
     },
     "octave_convention": {
-      "description": "オクターブ表記基準。\"C3=60\" または \"C4=60\"。\nベンダー間で不統一のため宣言必須 — 曖昧だとキースイッチが全部ずれる。",
-      "type": "string"
+      "description": "オクターブ表記基準。\"C3=60\" または \"C4=60\"。\nベンダー間で不統一のため、note_range・keyswitches・drum_map のいずれかを\n定義する場合は宣言必須(曖昧だとキースイッチが全部ずれる)。\nマスタリング/EQ 等、音程を扱わない effect デバイスでは省略できる。",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "parameters": {
       "default": [],
@@ -449,8 +452,7 @@
     "schema_version",
     "id",
     "name",
-    "device_type",
-    "octave_convention"
+    "device_type"
   ],
   "title": "DeviceProfile",
   "type": "object"
