@@ -25,6 +25,9 @@ enum Command {
     /// MIDI の生成・解析(compile / inspect / analyze / decompile)
     #[command(subcommand)]
     Midi(commands::midi::MidiCommand),
+    /// オーディオ解析(analyze / compare)
+    #[command(subcommand)]
+    Audio(commands::audio::AudioCommand),
     /// Device Profile の検証と検証用 MIDI 生成
     #[command(subcommand)]
     Profile(commands::profile::ProfileCommand),
@@ -47,6 +50,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result: CmdResult = match cli.command {
         Command::Midi(cmd) => cmd.run(),
+        Command::Audio(cmd) => cmd.run(),
         Command::Profile(cmd) => cmd.run(),
         Command::Schema(cmd) => cmd.run(),
         Command::Config(cmd) => cmd.run(),

@@ -1,5 +1,6 @@
 //! サブコマンド実装。
 
+pub mod audio;
 pub mod config;
 pub mod midi;
 pub mod profile;

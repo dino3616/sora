@@ -6,6 +6,7 @@
 use std::process::ExitCode as ProcExitCode;
 
 use serde::Serialize;
+use sora_audio::AudioError;
 use sora_core::error::{CoreError, ErrorReport, ExitCode};
 
 /// コマンドの実行結果。`Ok` は成功データ、`Err` は anyhow チェーン。
@@ -25,26 +26,37 @@ pub fn emit_success(value: &serde_json::Value) {
 
 /// anyhow エラーを ErrorReport へ正規化して stdout に出し、終了コードを返す。
 pub fn emit_error(err: &anyhow::Error) -> ProcExitCode {
-    let (report, exit) = match err.downcast_ref::<CoreError>() {
-        Some(core) => {
-            // message は CoreError(最も具体的な根本原因)。
-            // chain は それを包む context 層(外側 → 内側)で、根本原因は除く。
-            let core_msg = core.to_string();
-            let chain: Vec<String> = err
-                .chain()
-                .map(|c| c.to_string())
-                .filter(|m| *m != core_msg)
-                .collect();
-            (ErrorReport::from_core(core, chain), core.exit_code())
-        }
-        None => {
-            // 予期しないエラー: 最外殻を message、残りの原因を chain とする。
-            let chain: Vec<String> = err.chain().skip(1).map(|c| c.to_string()).collect();
-            (
-                ErrorReport::internal(err.to_string(), chain),
-                ExitCode::Internal,
-            )
-        }
+    // 根本原因(最も具体的なメッセージ)を除いた context 層を chain とする。
+    let chain_without = |leaf: &str| -> Vec<String> {
+        err.chain()
+            .map(|c| c.to_string())
+            .filter(|m| m != leaf)
+            .collect()
+    };
+
+    let (report, exit) = if let Some(core) = err.downcast_ref::<CoreError>() {
+        let msg = core.to_string();
+        (
+            ErrorReport::from_core(core, chain_without(&msg)),
+            core.exit_code(),
+        )
+    } else if let Some(audio) = err.downcast_ref::<AudioError>() {
+        let msg = audio.to_string();
+        let report = ErrorReport {
+            code: audio.code().to_string(),
+            message: msg.clone(),
+            details: serde_json::Value::Null,
+            hint: audio.hint(),
+            chain: chain_without(&msg),
+        };
+        // デコード/解析系は環境要因(ファイル不正・非対応形式)として扱う
+        (report, ExitCode::Environment)
+    } else {
+        let chain: Vec<String> = err.chain().skip(1).map(|c| c.to_string()).collect();
+        (
+            ErrorReport::internal(err.to_string(), chain),
+            ExitCode::Internal,
+        )
     };
 
     let wrapped = ErrorEnvelope { error: report };
