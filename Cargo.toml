@@ -24,6 +24,9 @@ clap = { version = "4", features = ["derive"] }
 midly = "0.5"
 rand = "0.9"
 rand_chacha = "0.9"
+symphonia = { version = "0.5", features = ["all"] }
+ebur128 = "0.1"
+realfft = "3"
 
 [workspace.lints.clippy]
 # clippy::all をリポジトリ全体で常時 deny(行単位/テストでの個別 allow は可)
