@@ -33,9 +33,27 @@ pub struct PartPlan {
     /// (例: Heavier7Strings のパームミュートは CC16(P.M. mix)で制御する)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<CcLane>,
+    /// Program Change イベント列。プリセット/パッチ全体の切り替えに使う
+    /// (例: AmpliTube は Program Change でプリセット全体を切り替える。
+    /// 単一ノブの連続制御である CC レーンとは異なり、機材の状態を丸ごと差し替える)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub program_changes: Vec<ProgramChangeEvent>,
     /// フレーズ設計の音楽的説明(なぜこう作ったか)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design_notes: Option<String>,
+}
+
+/// Program Change イベント(プリセット/パッチ全体の切り替え)。
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProgramChangeEvent {
+    /// 位置 "bar.beat.tick"
+    pub at: String,
+    /// プログラム番号(0-127)
+    pub program: u8,
+    /// 切り替え先の説明(任意。例: "Clean Champ preset (PC16 in AmpliTube's Program Change list)")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// 単一 CC の時間変化(オートメーションレーン)。

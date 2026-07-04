@@ -36,6 +36,8 @@ pub struct CompileReport {
     pub ppq: u32,
     pub note_count: usize,
     pub keyswitch_count: usize,
+    /// Program Change イベント数
+    pub program_change_count: usize,
     /// 曲末尾の絶対 tick
     pub end_tick: u64,
     pub warnings: Vec<CompileWarning>,
@@ -74,6 +76,12 @@ struct CcEvent {
     at: u64,
     cc: u8,
     value: u8,
+}
+
+/// Program Change イベント(解決済み)。
+struct ProgramChangeResolved {
+    at: u64,
+    program: u8,
 }
 
 /// Part Plan を SMF へコンパイルする。
@@ -363,6 +371,32 @@ pub fn compile(plan: &PartPlan, profile: &DeviceProfile) -> Result<CompileOutput
         }
     }
 
+    // Program Change イベント(プリセット全体の切り替え。例: AmpliTube のプリセット遷移)
+    let mut program_changes: Vec<ProgramChangeResolved> = Vec::new();
+    for (pci, pc) in plan.program_changes.iter().enumerate() {
+        let ptr = format!("/program_changes/{pci}");
+        let at = match parse_position(&pc.at, grid.beats_per_bar) {
+            Ok(p) => Some(p.to_absolute_ticks(grid.ticks_per_beat(), grid.beats_per_bar)),
+            Err(e) => {
+                push_issue(&mut issues, &format!("{ptr}/at"), e.code(), &e);
+                None
+            }
+        };
+        if pc.program > 127 {
+            push_issue(
+                &mut issues,
+                &format!("{ptr}/program"),
+                "INVALID_PROGRAM_NUMBER",
+                &CoreError::InvalidVelocity { value: pc.program },
+            );
+        } else if let Some(at) = at {
+            program_changes.push(ProgramChangeResolved {
+                at,
+                program: pc.program,
+            });
+        }
+    }
+
     if !issues.is_empty() {
         return Err(CoreError::Validation { issues });
     }
@@ -470,6 +504,7 @@ pub fn compile(plan: &PartPlan, profile: &DeviceProfile) -> Result<CompileOutput
         &notes,
         &keyswitches,
         &cc_events,
+        &program_changes,
     );
     let end_tick = notes
         .iter()
@@ -487,6 +522,7 @@ pub fn compile(plan: &PartPlan, profile: &DeviceProfile) -> Result<CompileOutput
             ppq: plan.ppq,
             note_count: notes.len(),
             keyswitch_count: keyswitches.len(),
+            program_change_count: program_changes.len(),
             end_tick,
             warnings,
         },
@@ -516,14 +552,16 @@ fn transpose_hint(note: MidiNote, low: MidiNote, high: MidiNote) -> Option<i8> {
     None
 }
 
-/// イベント種別の同 tick 内での順序(note off → CC → keyswitch on → note on)。
-/// CC はノート発音前に確定させたいので keyswitch/note on より前。
+/// イベント種別の同 tick 内での順序(note off → program change → CC → keyswitch on → note on)。
+/// Program Change は機材状態を丸ごと差し替えるため、その tick の他のどのイベントよりも
+/// 先に確定させる(CC はノート発音前に確定させたいので keyswitch/note on より前)。
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum EventClass {
     NoteOff = 0,
-    ControlChange = 1,
-    KeyswitchOn = 2,
-    NoteOn = 3,
+    ProgramChange = 1,
+    ControlChange = 2,
+    KeyswitchOn = 3,
+    NoteOn = 4,
 }
 
 fn build_smf(
@@ -533,9 +571,20 @@ fn build_smf(
     notes: &[ResolvedNote],
     keyswitches: &[KeyswitchEvent],
     cc_events: &[CcEvent],
+    program_changes: &[ProgramChangeResolved],
 ) -> Vec<u8> {
     // (abs_tick, class, note) → 決定論的順序
     let mut events: Vec<(u64, EventClass, u8, MidiMessage)> = Vec::new();
+    for pc in program_changes {
+        events.push((
+            pc.at,
+            EventClass::ProgramChange,
+            pc.program,
+            MidiMessage::ProgramChange {
+                program: u7::new(pc.program),
+            },
+        ));
+    }
     for cc in cc_events {
         events.push((
             cc.at,
@@ -882,6 +931,97 @@ mod tests {
                 .iter()
                 .any(|w| w.code == "CC_NOT_IN_PROFILE")
         );
+    }
+
+    fn effect_profile_no_notes() -> DeviceProfile {
+        parse_validated(&json!({
+            "schema_version": "1.0",
+            "id": "amplitube5",
+            "name": "AmpliTube 5",
+            "device_type": "effect",
+            "roles": ["guitar_amp_sim"]
+        }))
+        .unwrap()
+    }
+
+    /// AmpliTube のようにプリセット全体を Program Change で切り替え、
+    /// 単一ノブは CC で連続制御する 2 小節構成(1 小節目でディストーション増加、
+    /// 2 小節目で別プリセットへ切替)を模したテスト。ノートを持たない effect でも
+    /// program_changes/controls だけで compile できることを確認する。
+    #[test]
+    fn program_change_switches_preset_mid_plan() {
+        let plan: PartPlan = parse_validated(&json!({
+            "schema_version": "1.0",
+            "part_id": "amp-tone-transition",
+            "device": "amplitube5",
+            "bpm": 120.0,
+            "time_signature": "4/4",
+            "program_changes": [
+                { "at": "2.1.000", "program": 16, "note": "switch to Clean Champ preset" }
+            ],
+            "controls": [
+                { "cc": 80, "function": "distortion amount (user-assigned MIDI Learn target)", "points": [
+                    { "at": "1.1.000", "value": 40 },
+                    { "at": "1.4.000", "value": 110 }
+                ]}
+            ],
+            "sections": [{ "label": "transition", "start_bar": 1, "phrases": [{ "notes": [] }] }]
+        }))
+        .unwrap();
+        let out = compile(&plan, &effect_profile_no_notes()).unwrap();
+        assert_eq!(out.report.program_change_count, 1);
+        assert_eq!(out.report.note_count, 0);
+
+        let smf = Smf::parse(&out.bytes).unwrap();
+        let mut abs = 0u64;
+        let mut pc_tick = None;
+        let mut cc_ticks = Vec::new();
+        for ev in &smf.tracks[1] {
+            abs += ev.delta.as_int() as u64;
+            match ev.kind {
+                TrackEventKind::Midi {
+                    message: MidiMessage::ProgramChange { program },
+                    ..
+                } => {
+                    pc_tick = Some((abs, program.as_int()));
+                }
+                TrackEventKind::Midi {
+                    message: MidiMessage::Controller { value, .. },
+                    ..
+                } => {
+                    cc_ticks.push((abs, value.as_int()));
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(
+            pc_tick,
+            Some((1920, 16)),
+            "PC should land exactly at bar 2 (tick 1920 @ 4/4 PPQ480)"
+        );
+        assert_eq!(cc_ticks, vec![(0, 40), (1440, 110)]);
+        // Program Change は同一 tick の CC/note より前に確定する設計だが、ここでは
+        // 別 tick(1920 vs 1440)なので、時間順そのものでも PC が CC 群の後に来ることを確認
+        assert!(pc_tick.unwrap().0 > cc_ticks[1].0);
+    }
+
+    #[test]
+    fn program_number_out_of_range_errors() {
+        let plan: PartPlan = parse_validated(&json!({
+            "schema_version": "1.0",
+            "part_id": "bad-pc",
+            "device": "amplitube5",
+            "bpm": 120.0,
+            "time_signature": "4/4",
+            "program_changes": [ { "at": "1.1.000", "program": 200 } ],
+            "sections": [{ "label": "a", "start_bar": 1, "phrases": [{ "notes": [] }] }]
+        }))
+        .unwrap();
+        let err = compile(&plan, &effect_profile_no_notes()).unwrap_err();
+        let CoreError::Validation { issues } = err else {
+            panic!()
+        };
+        assert!(issues.iter().any(|i| i.code == "INVALID_PROGRAM_NUMBER"));
     }
 
     #[test]

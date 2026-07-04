@@ -204,6 +204,35 @@
         "phrases"
       ],
       "type": "object"
+    },
+    "ProgramChangeEvent": {
+      "additionalProperties": false,
+      "description": "Program Change イベント(プリセット/パッチ全体の切り替え)。",
+      "properties": {
+        "at": {
+          "description": "位置 \"bar.beat.tick\"",
+          "type": "string"
+        },
+        "note": {
+          "description": "切り替え先の説明(任意。例: \"Clean Champ preset (PC16 in AmpliTube's Program Change list)\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "program": {
+          "description": "プログラム番号(0-127)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "at",
+        "program"
+      ],
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -254,6 +283,13 @@
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "program_changes": {
+      "description": "Program Change イベント列。プリセット/パッチ全体の切り替えに使う\n(例: AmpliTube は Program Change でプリセット全体を切り替える。\n単一ノブの連続制御である CC レーンとは異なり、機材の状態を丸ごと差し替える)",
+      "items": {
+        "$ref": "#/$defs/ProgramChangeEvent"
+      },
+      "type": "array"
     },
     "schema_version": {
       "description": "スキーマバージョン(semver)",
