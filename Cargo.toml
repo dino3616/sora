@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1"
 jsonschema = "0.33"
+serde_path_to_error = "0.1"
 thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
@@ -23,8 +24,10 @@ rand = "0.9"
 rand_chacha = "0.9"
 
 [workspace.lints.clippy]
-unwrap_used = "warn"
-expect_used = "warn"
+# clippy::all をリポジトリ全体で常時 deny(行単位/テストでの個別 allow は可)
+all = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
 
 [profile.release]
 lto = "thin"

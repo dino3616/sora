@@ -1,6 +1,25 @@
 [package]
 name = "sora-core"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core types, MIDI compiler, and validation for Sora"
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+jsonschema = { workspace = true }
+serde_path_to_error = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+midly = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+
+[lints]
+workspace = true

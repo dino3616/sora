@@ -1,6 +1,19 @@
 [package]
 name = "sora-cli"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Sora CLI — the single-binary tool layer"
+
+[[bin]]
+name = "sora"
+path = "src/main.rs"
 
 [dependencies]
+sora-core = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! sora-audio — オーディオデコードと解析(技術要件書 §10)。
+//!
+//! Milestone 3 で実装する: symphonia デコード、ebur128 ラウドネス、
+//! realfft 帯域バランス、`audio analyze` / `audio compare`。
