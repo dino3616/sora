@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "daw": { "name": "Studio One", "version": "5", "os": "macOS" },
+  "control_level": 1,
+  "devices": [
+    { "id": "heavier7strings", "profile": "devices/heavier7strings.profile.json" }
+  ],
+  "preferences": {
+    "genres": ["modern metal", "j-rock"],
+    "default_ppq": 480,
+    "humanize": { "timing_ms": 6, "velocity": 8 }
+  }
+}

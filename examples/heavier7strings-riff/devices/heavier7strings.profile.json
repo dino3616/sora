@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "id": "heavier7strings",
+  "name": "Heavier7Strings",
+  "vendor": "Three-Body Technology",
+  "device_type": "instrument",
+  "roles": ["rhythm_guitar", "lead_guitar"],
+  "octave_convention": "C3=60",
+  "note_range": { "low": "B0", "high": "E5" },
+  "keyswitches": [
+    { "articulation": "sustain", "note": "C0", "mode": "latch", "confidence": "unverified", "source": "template default — 実機確認が必要" },
+    { "articulation": "palm_mute", "note": "C#0", "mode": "momentary", "confidence": "unverified", "source": "template default — 実機確認が必要" },
+    { "articulation": "pinch_harmonic", "note": "D0", "mode": "latch", "confidence": "unverified", "source": "template default — 実機確認が必要" }
+  ],
+  "polyphony": "poly",
+  "playing_conventions": [
+    "モダンメタルのリフは低音弦(6〜7弦)中心・パームミュート主体",
+    "ピッチハーモニクスはフレーズ末尾の長めのノートで映える",
+    "ダウンピッキング主体の 8分/16分刻みが基本"
+  ],
+  "constraints": [
+    "キースイッチノートは演奏音域の外(この Profile では B0 未満)に置くこと",
+    "このファイルはテンプレート。keyswitch のノート番号はプラグインの実設定に合わせて検証・修正すること"
+  ],
+  "manual_refs": []
+}
