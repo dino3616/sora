@@ -23,6 +23,10 @@ pub enum MidiCommand {
     Analyze(AnalyzeArgs),
     /// SMF を Part Plan へ逆コンパイルする(キースイッチを articulation へ逆解決)
     Decompile(DecompileArgs),
+    /// 仮想 MIDI ポートへ実時間送信する(control level 2+)
+    Send(super::send::SendArgs),
+    /// 全チャンネルへ All-Notes-Off を送る(鳴りっぱなしの手動リセット)
+    Panic(super::send::PanicArgs),
 }
 
 impl MidiCommand {
@@ -32,6 +36,8 @@ impl MidiCommand {
             MidiCommand::Inspect(a) => a.run(),
             MidiCommand::Analyze(a) => a.run(),
             MidiCommand::Decompile(a) => a.run(),
+            MidiCommand::Send(a) => a.run(),
+            MidiCommand::Panic(a) => a.run(),
         }
     }
 }

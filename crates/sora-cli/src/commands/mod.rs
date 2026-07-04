@@ -6,6 +6,7 @@ pub mod midi;
 pub mod profile;
 pub mod project;
 pub mod schema;
+pub mod send;
 
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};

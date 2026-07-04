@@ -22,6 +22,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 clap = { version = "4", features = ["derive"] }
 midly = "0.5"
+midir = "0.10"
+ctrlc = "3"
 rand = "0.9"
 rand_chacha = "0.9"
 symphonia = { version = "0.5", features = ["all"] }
