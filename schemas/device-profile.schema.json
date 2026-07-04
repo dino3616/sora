@@ -1,0 +1,457 @@
+{
+  "$defs": {
+    "CcMapEntry": {
+      "additionalProperties": false,
+      "description": "MIDI CC マップ 1 エントリ。",
+      "properties": {
+        "cc": {
+          "description": "CC 番号(0-127)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "この情報の確信度"
+        },
+        "function": {
+          "description": "機能の説明(例: \"vibrato depth\")",
+          "type": "string"
+        },
+        "safe_range": {
+          "description": "安全な値域 [min, max](これを超える値は明示フラグなしにエラー)",
+          "items": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "情報源",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cc",
+        "function",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "Confidence": {
+      "description": "フィールド単位の確信度(技術要件書 §4.2)。\nunverified の奏法を使うとコンパイルレポートに警告が出る。",
+      "oneOf": [
+        {
+          "const": "verified",
+          "description": "ユーザーが実機で動作確認済み",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "description": "マニュアル記載のみ(実機未確認)",
+          "type": "string"
+        },
+        {
+          "const": "unverified",
+          "description": "推測(マニュアル記述が曖昧、または情報源なし)",
+          "type": "string"
+        }
+      ]
+    },
+    "DeviceType": {
+      "description": "デバイス種別。",
+      "oneOf": [
+        {
+          "const": "instrument",
+          "description": "MIDI で発音する音源",
+          "type": "string"
+        },
+        {
+          "const": "effect",
+          "description": "オーディオ処理(アンプシム・マスタリング等)",
+          "type": "string"
+        }
+      ]
+    },
+    "DrumMapEntry": {
+      "additionalProperties": false,
+      "description": "ドラムノートマップ 1 エントリ。",
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "この情報の確信度"
+        },
+        "kit_piece": {
+          "description": "キットピース ID(snake_case。例: \"kick\", \"snare\", \"hihat_closed\"。\nPart Plan の notes[].kit_piece から参照される)",
+          "type": "string"
+        },
+        "note": {
+          "$ref": "#/$defs/NoteSpec",
+          "description": "対応ノート(octave_convention 基準)"
+        },
+        "source": {
+          "description": "情報源",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kit_piece",
+        "note",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "Keyswitch": {
+      "additionalProperties": false,
+      "description": "キースイッチ 1 エントリ。",
+      "properties": {
+        "articulation": {
+          "description": "奏法 ID(snake_case。Part Plan の notes[].articulation から参照される)",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "この情報の確信度"
+        },
+        "mode": {
+          "$ref": "#/$defs/KeyswitchMode",
+          "description": "動作モード"
+        },
+        "note": {
+          "$ref": "#/$defs/NoteSpec",
+          "description": "キースイッチノート(ノート名または MIDI 番号。octave_convention 基準)"
+        },
+        "source": {
+          "description": "情報源(例: \"manual p.23\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "articulation",
+        "note",
+        "mode",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "KeyswitchMode": {
+      "description": "キースイッチの動作モード(技術要件書 §7)。",
+      "oneOf": [
+        {
+          "const": "momentary",
+          "description": "押している間だけ有効。対象ノートと同じ長さで出力される",
+          "type": "string"
+        },
+        {
+          "const": "latch",
+          "description": "一度押すと次の切替まで有効。短ノート(10 tick)で出力される",
+          "type": "string"
+        }
+      ]
+    },
+    "NoteRange": {
+      "additionalProperties": false,
+      "description": "演奏可能音域。",
+      "properties": {
+        "high": {
+          "$ref": "#/$defs/NoteSpec",
+          "description": "最高音(ノート名または MIDI 番号)"
+        },
+        "low": {
+          "$ref": "#/$defs/NoteSpec",
+          "description": "最低音(ノート名または MIDI 番号)"
+        }
+      },
+      "required": [
+        "low",
+        "high"
+      ],
+      "type": "object"
+    },
+    "NoteSpec": {
+      "anyOf": [
+        {
+          "description": "MIDI ノート番号(0-127)",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "description": "ノート名(例: \"E1\", \"D#0\"。オクターブ基準は Profile の octave_convention に従う)",
+          "type": "string"
+        }
+      ],
+      "description": "JSON 上のノート表現。文字列ノート名と数値のどちらも受け付け、\n`MidiNote::resolve` で規約に従い正規化する(技術要件書 §4.2)。"
+    },
+    "Parameter": {
+      "additionalProperties": false,
+      "description": "エフェクトパラメータ(effect デバイス用)。",
+      "properties": {
+        "automation_target": {
+          "description": "DAW 側オートメーションのパラメータパス(Phase 4)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "この情報の確信度"
+        },
+        "name": {
+          "description": "パラメータ名(例: \"gate.threshold\")",
+          "type": "string"
+        },
+        "safe_range": {
+          "description": "安全な値域 [min, max]",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "情報源",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "description": "単位(例: \"dB\", \"%\", \"Hz\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "Polyphony": {
+      "description": "発音の同時性。",
+      "oneOf": [
+        {
+          "const": "poly",
+          "description": "和音可(既定)",
+          "type": "string"
+        },
+        {
+          "const": "mono",
+          "description": "単音。同一ピッチの重なりは自動トリムされる",
+          "type": "string"
+        }
+      ]
+    },
+    "PresetCategory": {
+      "additionalProperties": false,
+      "description": "プリセットカテゴリ(名前ベースの知識。UC16 トーンマッチングの一次情報)。",
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "この情報の確信度"
+        },
+        "description": {
+          "description": "説明(マニュアル・実聴に基づく特徴)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "examples": {
+          "default": [],
+          "description": "代表プリセット名",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "カテゴリ名(例: \"High Gain\", \"Modern Metal\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "confidence"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "VST インストゥルメント/エフェクトの構造化記述(Device Profile)。\n「ハードコードより Device Profile」原則の実体。\ninstrument / effect を単一スキーマで表現し、該当しないフィールドは省略する。",
+  "properties": {
+    "cc_map": {
+      "default": [],
+      "description": "MIDI CC マップ",
+      "items": {
+        "$ref": "#/$defs/CcMapEntry"
+      },
+      "type": "array"
+    },
+    "constraints": {
+      "default": [],
+      "description": "既知の制約(自由記述)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "device_type": {
+      "$ref": "#/$defs/DeviceType",
+      "description": "デバイス種別"
+    },
+    "drum_map": {
+      "description": "ドラムノートマップ(ドラム音源のみ)。kit_piece ID → ノート。",
+      "items": {
+        "$ref": "#/$defs/DrumMapEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "id": {
+      "description": "デバイス ID(kebab-case。sora.config.json の devices[].id と一致させる)",
+      "type": "string"
+    },
+    "keyswitch_lead_ticks": {
+      "description": "キースイッチを対象ノートの何 tick 前に置くか(既定 20)",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "keyswitches": {
+      "default": [],
+      "description": "キースイッチ奏法マップ(instrument のみ)",
+      "items": {
+        "$ref": "#/$defs/Keyswitch"
+      },
+      "type": "array"
+    },
+    "manual_refs": {
+      "default": [],
+      "description": "参照した資料(マニュアル PDF のパス等)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "midi_channel": {
+      "description": "出力 MIDI チャンネル(0 始まり)。既定: drum_map があれば 9(=ch10)、なければ 0",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "name": {
+      "description": "表示名",
+      "type": "string"
+    },
+    "note_range": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NoteRange"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "演奏可能音域(instrument のみ)。キースイッチはこの外側に置く。"
+    },
+    "octave_convention": {
+      "description": "オクターブ表記基準。\"C3=60\" または \"C4=60\"。\nベンダー間で不統一のため宣言必須 — 曖昧だとキースイッチが全部ずれる。",
+      "type": "string"
+    },
+    "parameters": {
+      "default": [],
+      "description": "エフェクトパラメータ(effect のみ)",
+      "items": {
+        "$ref": "#/$defs/Parameter"
+      },
+      "type": "array"
+    },
+    "playing_conventions": {
+      "default": [],
+      "description": "このデバイスの演奏慣習(Agent が Plan 起草時に参照する自由記述)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "polyphony": {
+      "$ref": "#/$defs/Polyphony",
+      "default": "poly",
+      "description": "発音の同時性。mono はノートオーバーラップを自動トリムする"
+    },
+    "preset_categories": {
+      "default": [],
+      "description": "プリセットカテゴリ(トーン提案・トーンマッチングの知識ベース)",
+      "items": {
+        "$ref": "#/$defs/PresetCategory"
+      },
+      "type": "array"
+    },
+    "roles": {
+      "default": [],
+      "description": "音楽的役割(例: \"rhythm_guitar\", \"bass\", \"drums\", \"mastering\")",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "description": "スキーマバージョン(semver。major 不一致の入力は拒否される)",
+      "type": "string"
+    },
+    "vendor": {
+      "description": "ベンダー名",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "device_type",
+    "octave_convention"
+  ],
+  "title": "DeviceProfile",
+  "type": "object"
+}

@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "KeyInfo": {
+      "additionalProperties": false,
+      "description": "キー情報。",
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Provenance",
+          "description": "値の出所(stated: ユーザー申告 / estimated: 解析推定 / daw: DAW 由来)"
+        },
+        "mode": {
+          "$ref": "#/$defs/KeyMode",
+          "description": "旋法"
+        },
+        "tonic": {
+          "description": "主音(例: \"E\", \"F#\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tonic",
+        "mode",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "KeyMode": {
+      "description": "旋法。",
+      "enum": [
+        "major",
+        "minor"
+      ],
+      "type": "string"
+    },
+    "Provenance": {
+      "description": "Project Context における値の出所。",
+      "oneOf": [
+        {
+          "const": "stated",
+          "description": "ユーザーが明示的に申告した値(推定値と矛盾したら常にこちらを優先)",
+          "type": "string"
+        },
+        {
+          "const": "estimated",
+          "description": "MIDI/オーディオ解析からの推定値",
+          "type": "string"
+        },
+        {
+          "const": "daw",
+          "description": "DAW プロジェクトから読み取った値(Phase 4)",
+          "type": "string"
+        }
+      ]
+    },
+    "SectionInfo": {
+      "additionalProperties": false,
+      "description": "セクション 1 エントリ。",
+      "properties": {
+        "end_bar": {
+          "description": "終了小節(この小節を含む)",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label": {
+          "description": "ラベル(例: \"verse\", \"chorus\", \"breakdown\")",
+          "type": "string"
+        },
+        "start_bar": {
+          "description": "開始小節(1 始まり)",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "start_bar",
+        "end_bar"
+      ],
+      "type": "object"
+    },
+    "TrackInfo": {
+      "additionalProperties": false,
+      "description": "トラック 1 エントリ。",
+      "properties": {
+        "active_source": {
+          "description": "アクティブ素材ポインタ — 「このリフ」等の指示語が指す現在の正。\n新バージョン採用のたびに更新される。指示語の解決順: (1) ユーザー明示パス\n(2) DAW 選択状態 (3) この値。解決結果は応答で復唱すること",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "analysis": {
+          "description": "解析レポートのパス",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "device": {
+          "description": "使用デバイス ID(Device Profile の id)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "トラック ID(kebab-case)",
+          "type": "string"
+        },
+        "role": {
+          "description": "音楽的役割(例: \"bass\", \"rhythm_guitar\", \"drums\")",
+          "type": "string"
+        },
+        "source": {
+          "description": "元素材のパス(ユーザー由来。書き換え禁止)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "role"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "現在の曲に関する構造化された理解。\nSora は孤立して生成せず、まずこれを読む(Vision 原則 4)。",
+  "properties": {
+    "bpm": {
+      "description": "テンポ(BPM)",
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "chord_progression": {
+      "description": "コード進行(自由形式。例: \"E5 - G5 - A5\")",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "key": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/KeyInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "キー(調)"
+    },
+    "references": {
+      "default": [],
+      "description": "リファレンス(参照楽曲・音像の説明)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "description": "スキーマバージョン(semver)",
+      "type": "string"
+    },
+    "sections": {
+      "default": [],
+      "description": "セクション構成(曲の時間順)",
+      "items": {
+        "$ref": "#/$defs/SectionInfo"
+      },
+      "type": "array"
+    },
+    "time_signature": {
+      "description": "拍子(例: \"4/4\")",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tracks": {
+      "default": [],
+      "description": "トラック台帳",
+      "items": {
+        "$ref": "#/$defs/TrackInfo"
+      },
+      "type": "array"
+    },
+    "user_notes": {
+      "default": [],
+      "description": "ユーザーメモ(意図・確定事項・未定事項)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "title": "ProjectContext",
+  "type": "object"
+}

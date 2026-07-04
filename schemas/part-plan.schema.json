@@ -1,0 +1,223 @@
+{
+  "$defs": {
+    "Humanize": {
+      "additionalProperties": false,
+      "description": "ヒューマナイズ設定。seed 必須 — 同一 Plan + 同一 Profile から\nバイト同一の .mid を再現するため(技術要件書 §4.4)。",
+      "properties": {
+        "seed": {
+          "description": "乱数シード(必須。再現性の保証)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timing_ms": {
+          "description": "タイミング揺らぎの標準偏差(ミリ秒)。±3σ でクリップ。\n小節頭のキックとベースのダウンビートには適用されない",
+          "format": "double",
+          "type": "number"
+        },
+        "velocity": {
+          "description": "ベロシティ揺らぎの最大幅(±この値の一様分布)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "timing_ms",
+        "velocity",
+        "seed"
+      ],
+      "type": "object"
+    },
+    "NoteSpec": {
+      "anyOf": [
+        {
+          "description": "MIDI ノート番号(0-127)",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "description": "ノート名(例: \"E1\", \"D#0\"。オクターブ基準は Profile の octave_convention に従う)",
+          "type": "string"
+        }
+      ],
+      "description": "JSON 上のノート表現。文字列ノート名と数値のどちらも受け付け、\n`MidiNote::resolve` で規約に従い正規化する(技術要件書 §4.2)。"
+    },
+    "Phrase": {
+      "additionalProperties": false,
+      "description": "フレーズ(音楽的なまとまり。レビュー時の単位)。",
+      "properties": {
+        "label": {
+          "description": "フレーズの説明(任意)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "ノート列",
+          "items": {
+            "$ref": "#/$defs/PlanNote"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "notes"
+      ],
+      "type": "object"
+    },
+    "PlanNote": {
+      "additionalProperties": false,
+      "description": "Plan 内の 1 ノート。\npitch(音程系)と kit_piece(ドラム系)はどちらか一方のみ指定する。",
+      "properties": {
+        "articulation": {
+          "description": "奏法 ID(Device Profile の keyswitches から参照。省略時は奏法なし)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration": {
+          "description": "長さ \"bars.beats.ticks\"(オフセット表記。例: \"0.0.240\" = 8分音符@PPQ480)",
+          "type": "string"
+        },
+        "kit_piece": {
+          "description": "キットピース ID(ドラムのみ。Device Profile の drum_map から参照)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pitch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoteSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "音程(ノート名または MIDI 番号。ドラムでは使わない)"
+        },
+        "start": {
+          "description": "開始位置 \"bar.beat.tick\"(bar/beat は 1 始まり。例: \"1.1.000\")",
+          "type": "string"
+        },
+        "velocity": {
+          "description": "ベロシティ(1-127)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "duration",
+        "velocity"
+      ],
+      "type": "object"
+    },
+    "PlanSection": {
+      "additionalProperties": false,
+      "description": "Plan 内の 1 セクション。",
+      "properties": {
+        "label": {
+          "description": "セクションラベル(project-context.json の sections と対応させる)",
+          "type": "string"
+        },
+        "phrases": {
+          "description": "フレーズ列",
+          "items": {
+            "$ref": "#/$defs/Phrase"
+          },
+          "type": "array"
+        },
+        "start_bar": {
+          "description": "開始小節(1 始まり)",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "start_bar",
+        "phrases"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Part Plan(IR)。Agent が音楽的判断として起草し、コンパイラが\nDevice Profile を参照して検証・奏法解決・`.mid` 出力を行う。\nレビュー・diff・バージョン管理の単位。",
+  "properties": {
+    "bpm": {
+      "description": "テンポ(BPM)",
+      "format": "double",
+      "type": "number"
+    },
+    "design_notes": {
+      "description": "フレーズ設計の音楽的説明(なぜこう作ったか)",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "device": {
+      "description": "対象デバイス ID(Device Profile の id)",
+      "type": "string"
+    },
+    "humanize": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Humanize"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "ヒューマナイズ設定。省略時は適用しない"
+    },
+    "part_id": {
+      "description": "パート ID(kebab-case。出力ファイル名の基底になる。例: \"guitar-riff-v1\")",
+      "type": "string"
+    },
+    "ppq": {
+      "default": 480,
+      "description": "PPQ(4分音符あたりの tick 数。省略時 480)",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "description": "スキーマバージョン(semver)",
+      "type": "string"
+    },
+    "sections": {
+      "description": "セクション列(曲の時間順)",
+      "items": {
+        "$ref": "#/$defs/PlanSection"
+      },
+      "type": "array"
+    },
+    "time_signature": {
+      "description": "拍子(例: \"4/4\", \"7/8\")",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "part_id",
+    "device",
+    "bpm",
+    "time_signature",
+    "sections"
+  ],
+  "title": "PartPlan",
+  "type": "object"
+}

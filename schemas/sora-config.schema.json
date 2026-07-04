@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "DawInfo": {
+      "additionalProperties": false,
+      "description": "DAW 情報。",
+      "properties": {
+        "name": {
+          "description": "DAW 名(例: \"Studio One\")",
+          "type": "string"
+        },
+        "os": {
+          "description": "OS(例: \"macOS 15\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "バージョン",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "DeviceRef": {
+      "additionalProperties": false,
+      "description": "デバイス参照。",
+      "properties": {
+        "id": {
+          "description": "デバイス ID(Device Profile の id と一致)",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Profile ファイルのパス(プロジェクトルート相対)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "HumanizeDefaults": {
+      "additionalProperties": false,
+      "description": "既定ヒューマナイズ強度(Plan 側で seed とともに明示される)。",
+      "properties": {
+        "timing_ms": {
+          "description": "タイミング揺らぎ標準偏差(ミリ秒)",
+          "format": "double",
+          "type": "number"
+        },
+        "velocity": {
+          "description": "ベロシティ揺らぎ幅",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "timing_ms",
+        "velocity"
+      ],
+      "type": "object"
+    },
+    "MidiConfig": {
+      "additionalProperties": false,
+      "description": "MIDI 送信設定。",
+      "properties": {
+        "port_name": {
+          "description": "仮想 MIDI ポート名(macOS: IAC Driver のポート名)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_name"
+      ],
+      "type": "object"
+    },
+    "PathsConfig": {
+      "additionalProperties": false,
+      "description": "パス慣習。",
+      "properties": {
+        "exports": {
+          "description": "生成物の出力先(既定 \"exports/\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manuals": {
+          "description": "マニュアル置き場(既定 \"manuals/\")",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Preferences": {
+      "additionalProperties": false,
+      "description": "ユーザーの好み。",
+      "properties": {
+        "default_ppq": {
+          "description": "既定 PPQ(省略時 480)",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "genres": {
+          "default": [],
+          "description": "好みのジャンル(例: \"modern metal\", \"j-rock\")",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "humanize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HumanizeDefaults"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "既定ヒューマナイズ強度"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "環境プロファイル。ユーザーの制作環境(DAW・デバイス・好み)と\ncontrol level を宣言する。",
+  "properties": {
+    "control_level": {
+      "default": 1,
+      "description": "制御深度の上限(0-5)。引き上げはユーザーの明示的な依頼に基づく\n`sora config set control-level` のみで行う(技術要件書 §2.4)",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "daw": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DawInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "DAW 情報"
+    },
+    "devices": {
+      "default": [],
+      "description": "利用可能なデバイス",
+      "items": {
+        "$ref": "#/$defs/DeviceRef"
+      },
+      "type": "array"
+    },
+    "midi": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MidiConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "MIDI 送信設定(control level 2+)"
+    },
+    "paths": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PathsConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "パス慣習"
+    },
+    "preferences": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Preferences"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "ユーザーの好み"
+    },
+    "schema_version": {
+      "description": "スキーマバージョン(semver)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "title": "SoraConfig",
+  "type": "object"
+}
