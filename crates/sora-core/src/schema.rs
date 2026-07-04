@@ -6,14 +6,15 @@
 use schemars::{JsonSchema, Schema, schema_for};
 
 use crate::error::CoreError;
-use crate::model::{DeviceProfile, PartPlan, ProjectContext, SoraConfig};
+use crate::model::{AutomationPlan, DeviceProfile, PartPlan, ProjectContext, SoraConfig};
 
 /// 登録済みスキーマの一覧(名前 → ファイル名は `<name>.schema.json`)。
-pub const SCHEMA_NAMES: [&str; 4] = [
+pub const SCHEMA_NAMES: [&str; 5] = [
     "sora-config",
     "device-profile",
     "project-context",
     "part-plan",
+    "automation-plan",
 ];
 
 /// 名前からスキーマを引く。
@@ -23,6 +24,7 @@ pub fn schema_by_name(name: &str) -> Result<Schema, CoreError> {
         "device-profile" => Ok(schema_for!(DeviceProfile)),
         "project-context" => Ok(schema_for!(ProjectContext)),
         "part-plan" => Ok(schema_for!(PartPlan)),
+        "automation-plan" => Ok(schema_for!(AutomationPlan)),
         other => Err(CoreError::UnknownSchema {
             name: other.to_string(),
             available: SCHEMA_NAMES.iter().map(|s| s.to_string()).collect(),

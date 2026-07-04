@@ -4,11 +4,13 @@
 //! description になり、Agent が Plan/Profile を起草する際の仕様として機能する。
 //! すべて `deny_unknown_fields`(L2: フィールド名 typo を黙殺しない)。
 
+mod automation;
 mod config;
 mod context;
 mod plan;
 mod profile;
 
+pub use automation::*;
 pub use config::*;
 pub use context::*;
 pub use plan::*;

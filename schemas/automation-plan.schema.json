@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "AutomationCurve": {
+      "description": "補間カーブ。",
+      "oneOf": [
+        {
+          "const": "linear",
+          "description": "線形",
+          "type": "string"
+        },
+        {
+          "const": "smooth",
+          "description": "滑らかな S 字",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "階段状(次の点まで値を保持)",
+          "type": "string"
+        }
+      ]
+    },
+    "AutomationPoint": {
+      "additionalProperties": false,
+      "description": "制御点。",
+      "properties": {
+        "at": {
+          "description": "位置 \"bar.beat.tick\"",
+          "type": "string"
+        },
+        "curve": {
+          "$ref": "#/$defs/AutomationCurve",
+          "default": "linear",
+          "description": "補間カーブ"
+        },
+        "value": {
+          "description": "値(unit に従う)",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "at",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AutomationTarget": {
+      "additionalProperties": false,
+      "description": "オートメーション対象。",
+      "properties": {
+        "device": {
+          "description": "デバイス ID(Device Profile の id)",
+          "type": "string"
+        },
+        "parameter": {
+          "description": "パラメータ名(Device Profile の parameters に存在するものに限る)",
+          "type": "string"
+        },
+        "track": {
+          "description": "対象トラック ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track",
+        "device",
+        "parameter"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "オートメーションプラン。単一パラメータの時間変化を記述する。",
+  "properties": {
+    "points": {
+      "description": "制御点列(時間順)",
+      "items": {
+        "$ref": "#/$defs/AutomationPoint"
+      },
+      "type": "array"
+    },
+    "rationale": {
+      "description": "この変化の音楽的理由",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schema_version": {
+      "description": "スキーマバージョン(semver)",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/AutomationTarget",
+      "description": "オートメーション対象"
+    },
+    "unit": {
+      "description": "値の単位(例: \"dB\", \"%\", \"Hz\")",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "target",
+    "points"
+  ],
+  "title": "AutomationPlan",
+  "type": "object"
+}
