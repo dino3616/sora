@@ -77,9 +77,13 @@ sora-cli:
 - [x] drum_map コンパイル(kit_piece 解決、ch10 既定)
 - [x] エフェクト系 Profile スキーマ(parameters / safe_range / automation_target)
 - [x] マニュアル読解 → Profile 起草の Agent ワークフローを CLAUDE.md に追記
-- [ ] 【要ユーザー】Heavier7Strings / MODO BASS / MODO DRUM / AmpliTube 5 / Ozone 9 のマニュアル所在確認 → 実 Profile 作成
-- [ ] 各デバイスの Profile 作成 + validate + verify.mid 実機確認
+- [x] Heavier7Strings 実 Profile 作成(マニュアル 1.7.0 読解、`~/Documents/Heavier7Strings/sora-project/devices/`、confidence: manual)+ validate + verify.mid 生成
+- [x] CC レーン対応(Part Plan `controls`): H7S のパームミュート=CC16 のように連続 CC 型奏法を表現。実 Profile で CC16 パームミュートリフのコンパイル確認済み
+- [ ] 【要ユーザー】H7S verify.mid を Studio One 5 で実機確認 → confidence 昇格。CC16 パームミュートの効きも確認
+- [ ] 【要ユーザー】MODO BASS / MODO DRUM / AmpliTube 5 / Ozone 9 のマニュアル所在 → 実 Profile 作成
 - [ ] missing_context 機構: references/context-requirements.json + レポート警告(§4.3)
+
+**メモ**: 実 Profile は著作権配慮(§16 リスク4)で公開リポジトリに置かず、ユーザーの `~/Documents/Heavier7Strings/sora-project/` に配置。
 
 ## Milestone 3: オーディオ解析 + トーン/マスタリングプラン(§15 M3)
 
