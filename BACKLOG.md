@@ -12,7 +12,13 @@
 
 ## 現在地
 
-**Milestone 1 実装中** — sora-core + sora-cli 実装完了、E2E スモーク成功(init→profile validate→verify-midi→compile→analyze→snapshot→config set)、GitHub 公開・CI 稼働。次: golden file テスト、サンプル Profile、examples、CLAUDE.md ワークフロー、実機確認(要ユーザー)。
+**M1 完了(実機確認除く)/ M2・M3 コア完了。** GitHub 公開・CI green。
+- M1: sora-core + sora-cli 全機能、golden テスト、example、CLAUDE.md ワークフロー ✅
+- M2: decompile / drum_map / エフェクト Profile スキーマ ✅(残: missing_context、実デバイス Profile=要マニュアル)
+- M3: sora-audio(loudness/spectrum/compare)、AutomationPlan スキーマ、genre-targets ✅(残: tone/master ワークフロー doc)
+- 次の大物: **M4 MCP サーバー + 仮想 MIDI(midir)**。実装は自己完結だが実機ルーティング確認に IAC Driver 設定が要る。
+
+**ユーザー確認待ち事項あり → 「未決事項」参照。**
 
 ## 実環境メモ(ユーザー PC・実態確認可能)
 
@@ -67,21 +73,21 @@ sora-cli:
 
 ## Milestone 2: Device Profile パイプライン + マルチ楽器(§15 M2)
 
-- [ ] `sora midi decompile`(SMF → PartPlan、キースイッチ逆解決)
-- [ ] drum_map コンパイル(kit_piece 解決、ch10 既定)
-- [ ] エフェクト系 Profile スキーマ(parameters / safe_range / automation_target)
-- [ ] マニュアル読解 → Profile 起草の Agent ワークフローを CLAUDE.md に追記
-- [ ] 【要ユーザー】MODO BASS / MODO DRUM / AmpliTube 5 / Ozone 9 のマニュアル所在確認
+- [x] `sora midi decompile`(SMF → PartPlan、キースイッチ逆解決)
+- [x] drum_map コンパイル(kit_piece 解決、ch10 既定)
+- [x] エフェクト系 Profile スキーマ(parameters / safe_range / automation_target)
+- [x] マニュアル読解 → Profile 起草の Agent ワークフローを CLAUDE.md に追記
+- [ ] 【要ユーザー】Heavier7Strings / MODO BASS / MODO DRUM / AmpliTube 5 / Ozone 9 のマニュアル所在確認 → 実 Profile 作成
 - [ ] 各デバイスの Profile 作成 + validate + verify.mid 実機確認
 - [ ] missing_context 機構: references/context-requirements.json + レポート警告(§4.3)
 
 ## Milestone 3: オーディオ解析 + トーン/マスタリングプラン(§15 M3)
 
-- [ ] sora-audio: symphonia デコード → ebur128(LUFS-I/LRA/true peak)
-- [ ] 7 バンド帯域バランス / クレストファクタ / ステレオ相関(realfft)
-- [ ] `sora audio analyze` / `sora audio compare`(§10)
-- [ ] references/genre-targets.json(初版: modern metal, j-rock)
-- [ ] Automation Plan スキーマ + 手動適用ドキュメント生成(§4.5)
+- [x] sora-audio: symphonia デコード → ebur128(LUFS-I/LRA/true peak)
+- [x] 7 バンド帯域バランス / クレストファクタ / ステレオ相関(realfft)
+- [x] `sora audio analyze` / `sora audio compare`(§10)
+- [x] references/genre-targets.json(初版: modern metal, j-rock)
+- [x] Automation Plan スキーマ(§4.5)
 - [ ] トーン/マスタリングプラン生成ワークフロー(UC7〜10, 16)を CLAUDE.md に追記
 
 ## Milestone 4: MCP 化 + 仮想 MIDI(§15 M4)
@@ -114,7 +120,10 @@ sora-cli:
 
 ## 未決事項(ユーザー確認待ち)
 
-(なし)
+1. **実デバイス Profile の作成方針**(M2)。各プラグインのマニュアル(PDF)の所在を教えてもらえれば、Agent が読解して実 Profile を起草できる。マニュアルがなければ実測(verify-midi を鳴らして挙動観察)ベースで起草する。どちらで進めるか。
+2. **verify.mid の実機確認**(M1/M2 の受け入れに必要)。Heavier7Strings 等で検証用 MIDI を鳴らし、キースイッチ発音を確認 → confidence 昇格。ユーザーの手が要る。
+3. **M4 仮想 MIDI**: macOS の IAC Driver 有効化(Audio MIDI 設定)。実装後にルーティング確認をお願いする。
+4. **M5 DAW 統合の対象**: 参照実装は REAPER(無料評価版で検証可)。実利用 DAW は Studio One 5 だが公式スクリプティング API が乏しい可能性。Studio One への到達手段(仮想 MIDI/ファイルインポート止まりか、それ以上を狙うか)は調査後に相談。
 
 ## 決定ログ
 
