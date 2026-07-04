@@ -121,13 +121,20 @@ sora-cli:
 
 ## Milestone 5: DAW 統合(§15 M5)
 
+- [x] 【調査完了 2026-07-05】Studio One 5 の制御経路を実機調査(§11.2.1 に確定事項を記載)。Claude Code レートリミット中に Codex が主に検証、Fable が別アングル調査で補強。
+  - **確定**: 公式 AppleScript 辞書・公開 API は無い。だが内部 JS SDK(`musicdevices.bundle/.../sdk/*.d.ts`)+ MCU コントロールサーフェス + 拡張機構が使える。
+  - **実機検証済み(Codex)**: Sora Bridge 拡張(`EditTask`)+ AppleScript メニュー実行で、開いたままの GUI に MIDI インポート/コマンドを反映できる。
+  - **別アングル調査(Fable)**: MCU 経由(仮想 MIDI)なら Accessibility 非依存で transport/マップ済みパラメータ automation が可能 = Bridge の弱点を補完する第一候補。UCNET は proprietary で行き止まり、`.song` ホットリロードも不可と確認。
+  - Codex 成果物: `~/Documents/Codex/2026-07-05/cl/outputs/`(検証レポート・Bridge プロトタイプ・インストーラ)。**Sora 作業ディレクトリ外**。M5 実装時にこれを参照実装として Rust 化する。
 - [ ] sora-daw クレート: DawAdapter trait + DawCapabilities + DawError(§11.1)
 - [ ] Generic(file-based)アダプタ(常設フォールバック)
-- [ ] REAPER 参照アダプタ(OSC + ReaScript、§11.2)※REAPER は無料評価版で検証可
-- [ ] 【調査】Studio One 5 の制御経路(公式スクリプティング API 非公開の可能性が高い → 到達可能な範囲を実態調査し §11.2 へ追記)
+- [ ] Studio One アダプタ: MCU(仮想 MIDI)で transport/automation + Bridge 拡張で write_clip(§11.2.1)
+- [ ] `sora daw setup studio-one`(Bridge 拡張の冪等インストール + doctor、Codex の install スクリプトを Rust 化)
+- [ ] REAPER 参照アダプタ(OSC + ReaScript、§11.2)※抽象の妥当性確認用。REAPER は無料評価版で検証可
 - [ ] `sora daw probe/read/transport/write-clip` / `sora automation apply` / `sora daw render`
 - [ ] 書き込み前バックアップ + WriteReceipt(§11.4)
 - [ ] selection ケイパビリティ(「これ」の決定的参照、§11.3)
+- [ ] 【要ユーザー】macOS Accessibility 権限付与(Bridge 経路)/ Studio One 再起動(拡張導入時)
 
 ## Milestone 6: 制作コパイロット(§15 M6)
 

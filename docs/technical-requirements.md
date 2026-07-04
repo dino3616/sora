@@ -568,11 +568,61 @@ pub trait DawAdapter {
 |---|---|---|---|
 | 参照実装 | REAPER | OSC(rosc)+ ReaScript ブリッジ | API が最も広く文書化されており、read/write/render/transport の全ケイパビリティを検証できる。アダプタ抽象の妥当性確認に使う |
 | 2 | Ableton Live | AbletonOSC(または Max for Live ブリッジ) | clip/transport は可能、render は制限あり |
-| 3 | ユーザーの実 DAW | 調査タスク(§16 リスク 3) | journey-map 記載の DAW のスクリプティング可否を確認後に実装判断 |
+| 1' | **Studio One 5** | **Sora Bridge 拡張 + AppleScript**(§11.2.1) | 実機検証済み(2026-07-05)。ユーザーの実 DAW。公式公開 API は無いが、実用ルートを確立 |
 | 常設 | Generic(file-based) | ファイル書き出し + インポート手順の提示 | capabilities = 出力のみ。全 DAW で動く最後の砦 |
 
 - 通信はローカルホスト限定(OSC の bind は 127.0.0.1 固定)。リモート DAW 制御は要件外とし、経路を持たない。
 - ヘッドレス VST ホスティング(DAW を介さず Rust 側でプラグインをロードしてレンダリング)は **R&D 項目とし、Phase 4 のクリティカルパスに置かない**(§16 リスク 7)。
+
+#### 11.2.1 Studio One 5 アダプタの実現方式(実機検証済み・2026-07-05)
+
+Studio One 5.5.2 の実機調査(アプリバンドル内部 + 拡張プロトタイプの動作検証)で確定した事実:
+
+**利用可能な足場**
+- Studio One は内部に JavaScript スクリプティング基盤を持つ。`Contents/PlugIns/musicdevices.bundle/Contents/Resources/sdk/` に TypeScript 型定義一式(`studioone.d.ts` 約1200行、`scriptinghost.d.ts` 等)が同梱されており、`Host.GUI.Commands.interpretCommand(...)`・`EditTask`・`Host.IO` などが拡張から利用できる(非公開だが実在する SDK)。
+- コントロールサーフェスは Mackie Control(MCU)標準をサポート(`Contents/devices/Mackie/`)。トランスポート(Rewind/FF/Stop/Play/Record = Note 0x5B〜0x5F)は **仮想 MIDI + MCU デバイス登録**でも制御可能(Accessibility 権限不要の代替経路)。
+- ユーザー拡張の配置先: `~/Library/Application Support/PreSonus/Studio One 5/Extensions/`。
+
+**検証済みのライブ編集ルート(Sora Bridge)**
+1. Sora が JSON リクエストを `~/Documents/Studio One/SoraBridge/inbox/` へ書く
+2. AppleScript で Studio One のメニュー項目 `トラック > Apply Sora Bridge Inbox`(Sora Bridge 拡張が登録する `EditTask`)を実行する
+3. 拡張が inbox を読み、`interpretCommand` で Studio One 内部コマンドを実行、処理済み JSON を outbox へ移動
+4. **開いたままの .song の GUI に反映される**(検証済み: View コマンド、既存ソングへの MIDI インポート)
+
+**確定した否定的事実**
+- `.song` / `.musicx` / `.envelopex` をディスク上で書き換えても、開いているドキュメントには**ホットリロードされない**(確認済み)。オフライン編集は「閉じて開き直す」前提の経路としてのみ有効。
+- 完全バックグラウンド常駐(`UserService`/`ProgramService` によるポーリング)は Studio One 5 では動作せず。検証済みトリガーは EditTask + AppleScript メニュー実行。
+- `Song > Import File` への直接パス引数渡しは未発見。ファイル選択ダイアログを AppleScript で自動入力するのが現状の実用ルート(検証済み)。
+
+**各ケイパビリティの実装方針**
+| capability | 第一候補ルート | 状態 |
+|---|---|---|
+| transport | **MCU(仮想 MIDI)** — Accessibility 非依存 | MCU マッピング確認済み・送信未検証 |
+| automation(マップ済みパラメータ) | **MCU(仮想 MIDI)** | 要検証 |
+| write_clip | MIDI 生成 → Bridge で Import File → ダイアログ自動入力 | **実機検証済み** |
+| render | Bridge でエクスポートコマンド + ダイアログ自動化 + 出力監視 | 未検証 |
+| read | `.song`(ZIP+XML)のオフライン読解 or Bridge 経由ダンプ | 部分検証 |
+
+**初期セットアップ(`sora daw setup studio-one` として自動化する)**
+1. Studio One 検出 → Sora Bridge 拡張のインストール/更新(冪等)→ `Extensions.settings` 有効化 → inbox/outbox 作成 → インストールレシート記録
+2. ユーザー操作が必要なのは2点のみ: **Studio One の再起動**(拡張導入時)と **macOS Accessibility 権限の付与**(メニュー/ダイアログ自動操作用)
+3. セットアップ後は、検証済みフロー(コマンド実行・MIDI インポート)にユーザーの手動操作は不要
+
+安全規約(§11.4)はこのルートにも適用する: セットアップは既存 `.song` に触れない、拡張は `sora.studioone.bridge` のみを管理、アンインストール手段を提供、Studio One の再起動は明示承認制。
+
+**Bridge ルートの弱点(既知の制約として明記)**
+1. **Accessibility 権限依存**: EditTask のトリガーが AppleScript のメニュー操作(System Events)であるため macOS の補助アクセス権限が必須。権限が無いと全経路が止まる。Studio One には AppleScript 辞書(sdef)が無く、UI スクリプティング以外の公式自動化口は無い(調査で確認)。
+2. **ダイアログ自動入力の脆さ**: write_clip は「Import File → ファイル選択ダイアログを AppleScript でパス入力」に依存。`interpretCommand(category, name, checkOnly?, invoker?)` の SDK シグネチャには**パス引数の口が無い**(構造的制約であり回避策未発見)。UI レイアウト・ローカライズ(メニュー名が日本語「トラック」等)・ダイアログ文言の変化に弱い。
+3. **バックグラウンド常駐が不可**: `addIdleTask` は SDK に存在するが自動処理は観測されず、`UserService`/`ProgramService` 常駐も Studio One 5 では機能せず。よって「Sora が書いたら自動で反映」ではなく、毎回トリガー(メニュー実行)が要る。
+4. **automation / render が未検証**: この2つは Bridge 経由の具体ルートが未確立。
+5. **オフライン `.song` 編集はホットリロードされない**: 開いているドキュメントには反映されない(確認済みの否定的事実)。
+
+**別アングルの調査結果(2026-07-05・軽く実施)**
+- **UCNET(Studio One Remote のネットワーク制御プロトコル)**: `remoteservice.settings` で networkServerEnabled=1、バイナリにも痕跡あり。しかし完全に proprietary(IANA 登録のみで仕様非公開)で、流用可能なオープンソース実装も無い。ゼロから framing を解析するのは大がかりで、軽量な代替にはならない → **不採用**。
+- **URL スキーム `studioone://`**: 存在するがファイル/ディープリンク用途とみられ、任意コマンド注入には使えない見込み → 有望でない。
+- **MCU(Mackie Control)コントロールサーフェス経由 = 唯一の有望な補完アングル**: Studio One は MCU 標準をネイティブサポート(`Contents/devices/Mackie/`)。**仮想 MIDI ポート + ユーザーデバイス定義の設置**で Sora を MCU デバイスとして登録すれば、**Accessibility 権限も AppleScript も拡張も無しで**トランスポート(Play/Stop/Rec/Rewind/FF = Note 0x5B〜0x5F、確認済み)と、コントロールサーフェスにマップされたミキサー/プラグインパラメータのオートメーションを制御できる。Bridge の弱点1〜3を回避できる。**ただし MCU は「MIDI クリップのインポート/クリップ作成」のような構造編集はできない**(コントロールサーフェスの守備範囲外)ため、Bridge を置き換えるのではなく補完する。
+
+**結論(このタスクの最終方針)**: `.song` ホットリロードと UCNET は行き止まり。Codex 検証で確立した **Sora Bridge 拡張 + AppleScript** を構造編集(write_clip・コマンド実行)の実用ルートとして採用する。加えて **transport と「マップ済みパラメータの automation」は MCU 経由(仮想 MIDI)を第一候補**とし、Accessibility 非依存の堅牢な経路にする。render は Bridge のエクスポートコマンド + ダイアログ自動化を候補として要追加検証。DawCapabilities はこの2経路(MCU / Bridge)の合算で申告する。
 
 ### 11.3 read_daw_project の動作
 
@@ -729,7 +779,7 @@ my-song/
 |---|---|---|---|
 | 1 | **キースイッチ情報の実機差**: マニュアル記載と実プラグインの挙動(バージョン差・ユーザー設定)が食い違う | 生成 MIDI が無音/誤奏法になり MVP 価値が崩れる | Profile に `confidence` と検証手順を持たせ、初回は「検証用 MIDI」(全奏法を 1 音ずつ鳴らす .mid)を生成してユーザーに確認してもらうワークフローを Milestone 1 に含める |
 | 2 | **オクターブ表記の不統一**(C3=60 問題) | キースイッチが 1〜2 オクターブずれる | Profile の `octave_convention` 必須化 + 検証用 MIDI で吸収 |
-| 3 | **対象 DAW の確定**: journey-map の DAW 例のスクリプティング API・MIDI インポート慣習が未調査 | Phase 4 のアダプタ実装対象に影響 | アダプタ抽象(§11)は REAPER 参照実装で検証し、ユーザーの実 DAW は Milestone 5 前に調査タスクを切る。Generic アダプタが常にフォールバックになる |
+| 3 | ~~**対象 DAW の確定**~~(解決済み 2026-07-05): 実 DAW は Studio One 5。公式公開 API は無いが、実現ルートを実機検証で確定(§11.2.1) | — | MCU(仮想 MIDI・Accessibility 非依存)で transport/automation、Sora Bridge 拡張 + AppleScript で write_clip。`.song` ホットリロードと UCNET は行き止まりと確認。Generic アダプタは常設フォールバック |
 | 4 | マニュアル PDF の著作権 | Profile の共有・同梱可否 | Profile はユーザーローカル生成物とし、リポジトリには実在プラグインの完全 Profile を同梱しない(examples はダミー or 実測ベースの最小構成) |
 | 5 | 音楽的品質(リフが「音楽的に関連している」か)は自動テスト不能 | 受け入れ基準が主観依存 | examples/ に基準ベースラインと「良い出力」の対を蓄積し、リグレッションは人間試聴 + Plan の構造的チェック(音域・密度・ベースとのリズム相関係数)で近似 |
 | 6 | Ozone/AmpliTube のプリセット/設定の自動適用経路(ファイル形式が非公開) | `suggest_plugin_settings` が手動適用止まりになる範囲 | Phase 3 までは「手動適用可能な具体性」(UC7 受け入れ基準)で十分。Phase 4 では DAW 側のジェネリックなプラグインパラメータオートメーション(§4.5 の `automation_target`)経由を優先し、ネイティブプリセット書き込みは調査後に判断 |
@@ -740,7 +790,7 @@ my-song/
 
 ## 17. 本書が意図的に決めていないこと
 
-- ユーザーの実 DAW 向けアダプタの具体設計(調査タスク完了後に §11.2 へ追記)
+- Studio One 5 アダプタの実装(調査は §11.2.1 で完了。MCU 経由の transport/automation と Bridge 経由の write_clip を実コード化するのは M5 の作業)
 - Device Profile のコミュニティ共有・配布形態(著作権整理後)
 - ヘッドレス VST ホスティングの採否(R&D 結果待ち、§16 リスク 7)
 - Phase 5 レビュアーのプロンプト詳細(Milestone 5 の成果物スキーマ確定後に設計)
