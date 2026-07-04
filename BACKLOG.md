@@ -12,7 +12,7 @@
 
 ## 現在地
 
-**Milestone 1 実装中** — プロジェクト足場を構築した段階。次: sora-core の型定義。
+**Milestone 1 実装中** — sora-core + sora-cli 実装完了、E2E スモーク成功(init→profile validate→verify-midi→compile→analyze→snapshot→config set)、GitHub 公開・CI 稼働。次: golden file テスト、サンプル Profile、examples、CLAUDE.md ワークフロー、実機確認(要ユーザー)。
 
 ## 実環境メモ(ユーザー PC・実態確認可能)
 
@@ -26,39 +26,42 @@
 
 - [x] git init / Cargo workspace(sora-core, sora-audio, sora-cli)
 - [x] rust-toolchain.toml / .gitignore / BACKLOG.md
-- [ ] CLAUDE.md(ビルド・テスト・行動規範)
-- [ ] GitHub リポジトリ作成(dino3616/sora, public)+ 初回 push
-- [ ] CI(GitHub Actions: fmt / clippy / test / schema drift)
+- [x] CLAUDE.md(ビルド・テスト・行動規範)
+- [x] GitHub リポジトリ作成(dino3616/sora, public)+ 初回 push
+- [x] CI(GitHub Actions: fmt / clippy / test / schema drift)
 
 ## Milestone 1: MVP コアループ(§15 M1)
 
 sora-core:
-- [ ] newtype 群: `MidiNote`(octave_convention 対応パース), `Velocity`, `BarBeatTick`, `Ppq`(§4.6 L3)
-- [ ] エラー型: `CoreError` / `ValidationIssue` / `ErrorReport` + 終了コード規約(§6)
-- [ ] モデル: `SoraConfig`(§4.1), `DeviceProfile`(§4.2), `ProjectContext`(§4.3, active_source 含む), `PartPlan`(§4.4)
-- [ ] スキーマ生成: schemars → JSON Schema 出力 + description 必須(§4.6)
-- [ ] 検証 3 層: jsonschema(L1)→ serde deny_unknown_fields(L2)→ ドメイン検証(L3)
-- [ ] MIDI コンパイラ: PartPlan + Profile → SMF Format 1(§7 の全規約: keyswitch lead/momentary/latch, 音域検査, 衝突検査, humanize seed 固定, モノフォニックトリム)
-- [ ] MIDI inspect: SMF → ノート/テンポ/CC ダンプ + 統計
-- [ ] MIDI analyze: BPM 推定・調性中心(Krumhansl-Schmuckler)・リズム統計
-- [ ] 検証用 MIDI 生成: Profile → 全奏法 1 音ずつの verify.mid(§16 リスク 1)
+- [x] newtype 群: `MidiNote`(octave_convention 対応パース), `Velocity`, `BarBeatTick`(§4.6 L3)
+- [x] エラー型: `CoreError` / `ValidationIssue` / `ErrorReport` + 終了コード規約(§6)
+- [x] モデル: `SoraConfig`(§4.1), `DeviceProfile`(§4.2), `ProjectContext`(§4.3, active_source 含む), `PartPlan`(§4.4)
+- [x] スキーマ生成: schemars → JSON Schema 出力 + description 必須(§4.6)
+- [x] 検証 3 層: jsonschema(L1)→ serde deny_unknown_fields(L2)→ ドメイン検証(L3)
+- [x] MIDI コンパイラ: PartPlan + Profile → SMF Format 1(§7 の全規約: keyswitch lead/momentary/latch, 音域検査, 衝突検査, humanize seed 固定, モノフォニックトリム)
+- [x] MIDI inspect: SMF → ノート/テンポ/CC ダンプ + 統計
+- [x] MIDI analyze: BPM 推定・調性中心(Krumhansl-Schmuckler)・リズム統計
+- [x] 検証用 MIDI 生成: Profile → 全奏法 1 音ずつの verify.mid(§16 リスク 1)
+- [ ] drum_map コンパイル(kit_piece 解決、ch10 既定)※compile 側は実装済、CLI 未接続
 
 sora-cli:
-- [ ] clap 骨格 + `--format json` + ErrorReport 出力 + 終了コード(§6.3)
-- [ ] `sora midi compile` / `sora midi inspect` / `sora midi analyze`
-- [ ] `sora profile validate` / `sora profile verify-midi`
-- [ ] `sora schema dump [--out] [--check]`
-- [ ] `sora config set control-level <0-5>`(確認表示 + actions.jsonl 記録、§2.4)
-- [ ] `sora init`(プロジェクト雛形生成、§14)
-- [ ] `sora version snapshot <label>`
-- [ ] `sora doctor`(環境診断)
+- [x] clap 骨格 + JSON 出力 + ErrorReport 出力 + 終了コード(§6.3)
+- [x] `sora midi compile` / `sora midi inspect` / `sora midi analyze`
+- [x] `sora profile validate` / `sora profile verify-midi`
+- [x] `sora schema dump [--out] [--check]`
+- [x] `sora config set control-level <0-5>`(確認表示 + actions.jsonl 記録、§2.4)
+- [x] `sora init`(プロジェクト雛形生成、§14)
+- [x] `sora version snapshot <label>`
+- [x] `sora doctor`(環境診断)
 
 テスト・検証:
-- [ ] golden file テスト(コンパイラのバイト同一性)+ insta スナップショット
-- [ ] Heavier7Strings サンプル Profile(実機確認前は confidence: manual)
-- [ ] examples/: ベースライン MIDI + E2E デモ手順
-- [ ] CLAUDE.md に Sora ワークフロー(Plan 起草 → compile → 説明)を記述
+- [x] golden file テスト(コンパイラのバイト同一性、SORA_BLESS で更新)
+- [x] Heavier7Strings サンプル Profile(confidence: unverified、実機確認前提のテンプレート)
+- [x] examples/: E2E デモ手順(examples/heavier7strings-riff/)
+- [x] CLAUDE.md に Sora ワークフロー(Plan 起草 → compile → 説明)を記述
 - [ ] 【要ユーザー】verify.mid を Studio One 5 + Heavier7Strings で実機確認 → confidence 昇格
+
+**M1 は実機確認以外完了。** insta スナップショットは JSON レポート系で M2 以降に追加検討。
 
 受け入れ(§15 M1): ベースライン → Plan → compile → 実 DAW で奏法発音 / ErrorReport のみで 1 往復自己修正 / v2 生成で v1 が versions/ に残る
 
