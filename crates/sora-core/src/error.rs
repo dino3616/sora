@@ -94,6 +94,9 @@ pub enum CoreError {
         source: midly::Error,
     },
 
+    #[error("refusing to overwrite existing file {path}")]
+    FileExists { path: PathBuf },
+
     #[error("I/O error on {path}")]
     Io {
         path: PathBuf,
@@ -142,6 +145,7 @@ impl CoreError {
             CoreError::InvalidOctaveConvention { .. } => "INVALID_OCTAVE_CONVENTION",
             CoreError::UnknownSchema { .. } => "UNKNOWN_SCHEMA",
             CoreError::MidiParse { .. } => "MIDI_PARSE_ERROR",
+            CoreError::FileExists { .. } => "FILE_EXISTS",
             CoreError::Io { .. } => "IO_ERROR",
             CoreError::JsonParse { .. } => "JSON_PARSE_ERROR",
         }
@@ -185,6 +189,9 @@ impl CoreError {
             CoreError::UnknownSchema { available, .. } => {
                 Some(format!("利用可能なスキーマ: {}", available.join(", ")))
             }
+            CoreError::FileExists { .. } => Some(
+                "Sora は非破壊: 別名で保存するか version snapshot を使ってください".to_string(),
+            ),
             _ => None,
         }
     }
@@ -239,6 +246,7 @@ impl CoreError {
             CoreError::MidiParse { path, source } => {
                 json!({ "path": path, "cause": source.to_string() })
             }
+            CoreError::FileExists { path } => json!({ "path": path }),
             CoreError::Io { path, source } => {
                 json!({ "path": path, "cause": source.to_string() })
             }

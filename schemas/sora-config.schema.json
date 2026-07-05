@@ -15,6 +15,17 @@
             "null"
           ]
         },
+        "studio_one": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StudioOneSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Studio One 統合の設定(技術要件書 §11.2.1)"
+        },
         "version": {
           "description": "バージョン",
           "type": [
@@ -136,6 +147,50 @@
             }
           ],
           "description": "既定ヒューマナイズ強度"
+        }
+      },
+      "type": "object"
+    },
+    "StudioOneSettings": {
+      "additionalProperties": false,
+      "description": "Studio One 統合(Sora Bridge + Sora Surface)の設定。\n省略時は OS 既定パスを使う。",
+      "properties": {
+        "app_support": {
+          "description": "アプリ設定ディレクトリ\n(既定: macOS = ~/Library/Application Support/PreSonus/Studio One 5)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bridge_timeout_ms": {
+          "description": "Bridge 処理完了(inbox → outbox 移動)の待機タイムアウト(ミリ秒、既定 10000)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "song_path": {
+          "description": "現在の .song のパス。read_project と書き込み前バックアップ(§11.4)に使う",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trigger_port": {
+          "description": "Sora Surface が受信する仮想 MIDI ポート名(部分一致)。\n演奏プレビュー用の midi.port_name とは別ポートにすること\n(同一ポートだと再生ノートがコマンドとして解釈される)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user_content": {
+          "description": "ユーザーコンテンツディレクトリ(既定: ~/Documents/Studio One)",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"

@@ -47,6 +47,34 @@ pub struct DawInfo {
     /// OS(例: "macOS 15")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os: Option<String>,
+    /// Studio One 統合の設定(技術要件書 §11.2.1)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub studio_one: Option<StudioOneSettings>,
+}
+
+/// Studio One 統合(Sora Bridge + Sora Surface)の設定。
+/// 省略時は OS 既定パスを使う。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StudioOneSettings {
+    /// ユーザーコンテンツディレクトリ(既定: ~/Documents/Studio One)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_content: Option<String>,
+    /// アプリ設定ディレクトリ
+    /// (既定: macOS = ~/Library/Application Support/PreSonus/Studio One 5)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_support: Option<String>,
+    /// 現在の .song のパス。read_project と書き込み前バックアップ(§11.4)に使う
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub song_path: Option<String>,
+    /// Sora Surface が受信する仮想 MIDI ポート名(部分一致)。
+    /// 演奏プレビュー用の midi.port_name とは別ポートにすること
+    /// (同一ポートだと再生ノートがコマンドとして解釈される)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger_port: Option<String>,
+    /// Bridge 処理完了(inbox → outbox 移動)の待機タイムアウト(ミリ秒、既定 10000)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bridge_timeout_ms: Option<u64>,
 }
 
 /// デバイス参照。

@@ -9,6 +9,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod error;
+pub mod fsutil;
 pub mod midi;
 pub mod model;
 pub mod profile;

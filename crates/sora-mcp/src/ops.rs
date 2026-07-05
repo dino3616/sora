@@ -17,24 +17,7 @@ use sora_core::validate::load_validated;
 
 /// ファイルへ書き込む(非破壊: 既存パスは上書きしない。技術要件書 §13)。
 pub fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
-    if path.exists() {
-        anyhow::bail!(
-            "refusing to overwrite existing file `{}` (Sora は非破壊: 別名で保存するか version snapshot を使ってください)",
-            path.display()
-        );
-    }
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(parent).map_err(|e| CoreError::Io {
-            path: parent.to_path_buf(),
-            source: e,
-        })?;
-    }
-    std::fs::write(path, bytes).map_err(|e| CoreError::Io {
-        path: path.to_path_buf(),
-        source: e,
-    })?;
+    sora_core::fsutil::write_new_file(path, bytes)?;
     Ok(())
 }
 
