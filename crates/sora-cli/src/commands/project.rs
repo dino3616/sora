@@ -220,10 +220,75 @@ pub fn doctor() -> CmdResult {
         "control_level": control_level,
         "missing_directories": missing_dirs,
         "midi": doctor_midi(configured_port),
-        "notes": [
-            "DAW 統合は Milestone 5 で対応予定"
-        ]
+        "daw": doctor_daw(&cwd),
     }))
+}
+
+/// DAW 統合の診断(§11)。解決されるアダプタと Studio One セットアップ状態。
+fn doctor_daw(root: &Path) -> serde_json::Value {
+    use sora_core::model::SoraConfig;
+    use sora_daw::studio_one::{StudioOnePaths, setup};
+
+    let config: Option<SoraConfig> =
+        sora_core::validate::load_validated(&root.join("sora.config.json")).ok();
+    let resolved = sora_daw::adapter::resolve_adapter(root, config.as_ref())
+        .name()
+        .to_string();
+
+    let settings = config
+        .as_ref()
+        .and_then(|c| c.daw.as_ref())
+        .and_then(|d| d.studio_one.as_ref());
+    let trigger_port = settings.and_then(|s| s.trigger_port.clone());
+    let song_path = settings.and_then(|s| s.song_path.clone());
+    let ports = sora_mcp::ops::list_output_ports().unwrap_or_default();
+    let trigger_port_found = trigger_port
+        .as_deref()
+        .map(|name| ports.iter().any(|p| p.contains(name)));
+    let song_path_exists = song_path.as_deref().map(|p| Path::new(p).is_file());
+
+    let paths = StudioOnePaths::resolve(config.as_ref());
+    let studio_one_present = paths.app_support.is_dir();
+    let check = setup::check(&paths);
+
+    let mut hints: Vec<String> = Vec::new();
+    if studio_one_present && !check.ok {
+        hints.push(
+            "Sora Bridge / Sora Surface が未導入または不完全です。`sora daw setup studio-one` を実行してください"
+                .to_string(),
+        );
+    }
+    if trigger_port.is_none() {
+        hints.push(
+            "daw.studio_one.trigger_port が未設定です(Sora Surface 用の仮想 MIDI ポート。演奏用 midi.port_name とは別にする)"
+                .to_string(),
+        );
+    } else if trigger_port_found == Some(false) {
+        hints.push(
+            "trigger_port がポート一覧に見つかりません。Audio MIDI 設定(IAC)/ loopMIDI でポートを作成してください"
+                .to_string(),
+        );
+    }
+    if song_path.is_none() {
+        hints.push(
+            "daw.studio_one.song_path が未設定です(read_project と書き込み前バックアップ §11.4 に必要)"
+                .to_string(),
+        );
+    }
+
+    json!({
+        "resolved_adapter": resolved,
+        "studio_one": {
+            "present": studio_one_present,
+            "app_support": paths.app_support,
+            "setup": check,
+            "trigger_port": trigger_port,
+            "trigger_port_found": trigger_port_found,
+            "song_path": song_path,
+            "song_path_exists": song_path_exists,
+        },
+        "hints": hints,
+    })
 }
 
 /// 仮想 MIDI 送信経路の診断(§9)。ポートの自動作成はせず、手順を提示する。

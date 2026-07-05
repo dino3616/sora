@@ -262,7 +262,7 @@ impl CoreError {
 
 /// bin 層が stdout に出す構造化エラー(技術要件書 §6.3)。
 /// CLI と MCP で同一表現を保証する。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ErrorReport {
     pub code: String,
     pub message: String,

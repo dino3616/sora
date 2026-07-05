@@ -5,9 +5,10 @@
 
 use sora_audio::AudioError;
 use sora_core::error::{CoreError, ErrorReport, ExitCode};
+use sora_daw::error::{DawError, DawErrorClass};
 
-/// anyhow チェーンを走査し、[`CoreError`] / [`AudioError`] を downcast して
-/// 構造化 [`ErrorReport`] と終了コードへ正規化する。
+/// anyhow チェーンを走査し、[`CoreError`] / [`AudioError`] / [`DawError`] /
+/// ゲート拒否を downcast して構造化 [`ErrorReport`] と終了コードへ正規化する。
 pub fn normalize(err: &anyhow::Error) -> (ErrorReport, ExitCode) {
     // 根本原因(最も具体的なメッセージ)を除いた context 層を chain とする。
     let chain_without = |leaf: &str| -> Vec<String> {
@@ -23,6 +24,22 @@ pub fn normalize(err: &anyhow::Error) -> (ErrorReport, ExitCode) {
             ErrorReport::from_core(core, chain_without(&msg)),
             core.exit_code(),
         )
+    } else if let Some(rejection) = err.downcast_ref::<crate::gate::GateRejection>() {
+        (rejection.0.clone(), ExitCode::Validation)
+    } else if let Some(daw) = err.downcast_ref::<DawError>() {
+        let msg = daw.to_string();
+        let report = ErrorReport {
+            code: daw.code().to_string(),
+            message: msg.clone(),
+            details: daw.details(),
+            hint: daw.hint(),
+            chain: chain_without(&msg),
+        };
+        let exit = match daw.class() {
+            DawErrorClass::Recoverable => ExitCode::Validation,
+            DawErrorClass::Environment => ExitCode::Environment,
+        };
+        (report, exit)
     } else if let Some(audio) = err.downcast_ref::<AudioError>() {
         let msg = audio.to_string();
         let report = ErrorReport {

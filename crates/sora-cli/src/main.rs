@@ -37,6 +37,12 @@ enum Command {
     /// 環境設定の変更(control level 等)
     #[command(subcommand)]
     Config(commands::config::ConfigCommand),
+    /// DAW 統合(probe / read / transport / write-clip / render / setup)
+    #[command(subcommand)]
+    Daw(commands::daw::DawCommand),
+    /// オートメーションの適用
+    #[command(subcommand)]
+    Automation(commands::automation::AutomationCommand),
     /// プロジェクト雛形の生成
     Init(commands::project::InitArgs),
     /// バージョンスナップショットの作成
@@ -59,6 +65,8 @@ fn main() -> ExitCode {
         Command::Profile(cmd) => cmd.run(),
         Command::Schema(cmd) => cmd.run(),
         Command::Config(cmd) => cmd.run(),
+        Command::Daw(cmd) => cmd.run(),
+        Command::Automation(cmd) => cmd.run(),
         Command::Init(args) => args.run(),
         Command::Version(cmd) => cmd.run(),
         Command::Doctor => commands::project::doctor(),

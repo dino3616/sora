@@ -66,6 +66,9 @@ impl NamedSchema for ProjectContext {
 impl NamedSchema for PartPlan {
     const SCHEMA_NAME: &'static str = "part-plan";
 }
+impl NamedSchema for AutomationPlan {
+    const SCHEMA_NAME: &'static str = "automation-plan";
+}
 
 #[cfg(test)]
 mod tests {

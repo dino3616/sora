@@ -17,6 +17,7 @@ tracing = { workspace = true }
 midir = { workspace = true }
 rmcp = { workspace = true }
 tokio = { workspace = true }
+sora-daw = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -1753,6 +1753,7 @@ dependencies = [
  "serde_json",
  "sora-audio",
  "sora-core",
+ "sora-daw",
  "sora-mcp",
  "tokio",
 ]
@@ -1804,6 +1805,7 @@ dependencies = [
  "serde_json",
  "sora-audio",
  "sora-core",
+ "sora-daw",
  "tempfile",
  "tokio",
  "tracing",

@@ -5,12 +5,31 @@
 //! 有効化方法」を返す。level の引き上げはユーザーの明示的な依頼に基づく
 //! `sora config set control-level <n>`(CLI)のみで行い、MCP からは変更できない。
 
+use std::fmt;
 use std::path::Path;
 
 use serde_json::json;
 use sora_core::error::ErrorReport;
 use sora_core::model::SoraConfig;
 use sora_core::validate::load_validated;
+
+/// ゲート拒否を anyhow 経路(CLI)で運ぶためのラッパ。
+/// `report::normalize` が downcast して同一の ErrorReport 表現に戻す(§6.4)。
+#[derive(Debug)]
+pub struct GateRejection(pub ErrorReport);
+
+impl fmt::Display for GateRejection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.message)
+    }
+}
+
+impl std::error::Error for GateRejection {}
+
+/// [`check`] の anyhow 版(CLI コマンド用)。
+pub fn require(root: &Path, tool: &str, required: u8) -> anyhow::Result<u8> {
+    check(root, tool, required).map_err(|report| anyhow::Error::new(GateRejection(report)))
+}
 
 /// config 不在・不正時の既定 level(SoraConfig の既定値と一致させる)。
 const DEFAULT_LEVEL: u8 = 1;
