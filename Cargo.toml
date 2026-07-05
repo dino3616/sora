@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/sora-core",
     "crates/sora-audio",
+    "crates/sora-daw",
     "crates/sora-mcp",
     "crates/sora-cli",
 ]
@@ -16,6 +17,7 @@ repository = "https://github.com/dino3616/sora"
 [workspace.dependencies]
 sora-core = { path = "crates/sora-core" }
 sora-audio = { path = "crates/sora-audio" }
+sora-daw = { path = "crates/sora-daw" }
 sora-mcp = { path = "crates/sora-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

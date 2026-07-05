@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DeviceDefinition
+	vendor="Sora"
+	name="Sora Surface"
+
+	classID="{7B3A2C91-5E48-4D06-9F21-C4A8B1D0537E}"
+	category="Surface"
+
+	nativeCode="ControlSurfaceDevice"
+	surfaceFile="Sora Surface.surface.xml"
+
+	detectorPortName="Sora"
+/>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClassFactory>
+	<ScriptClass
+		classID="{F8C017B7-9B57-4D94-9B01-6FE33D8F4099}"
+		category="ProgramService"
+		name="Sora Bridge"
+		description="Bridge for applying Sora edit requests inside Studio One"
+		sourceFile="service.js"
+		functionName="createInstance">
+		<Attribute id="servicePriority" value="1000"/>
+	</ScriptClass>
+
+	<ScriptClass
+		classID="{99172009-3788-46D0-958C-5B21CC63EAF6}"
+		category="EditTask"
+		subCategory="TrackEdit"
+		name="Apply Sora Bridge Inbox"
+		description="Apply the next queued Sora Bridge request"
+		sourceFile="service.js"
+		functionName="createApplyTask">
+		<Attribute id="alwaysEnabled" value="1"/>
+		<Attribute id="menuPriority" value="999"/>
+	</ScriptClass>
+</ClassFactory>

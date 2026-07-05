@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaInformation>
+	<Attribute id="Package:ID" value="sora.studioone.bridge"/>
+	<Attribute id="Package:Name" value="Sora Studio One Bridge"/>
+	<Attribute id="Package:Description" value="Bridge for applying Sora edit requests inside Studio One"/>
+	<Attribute id="Package:Version" value="0.2.0"/>
+	<Attribute id="Package:Vendor" value="Sora"/>
+	<Attribute id="Package:Website" value="https://github.com/dino3616/sora"/>
+</MetaInformation>

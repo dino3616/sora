@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Sora Surface — 仮想 MIDI トリガー式コントロールサーフェス(技術要件書 §11.2.1)
+
+	Sora(Rust 側 sora-daw)が仮想 MIDI ポート経由で特定ノートを送ると、
+	対応する Studio One コマンドが発火する。ノートマップは
+	crates/sora-daw/src/studio_one/mod.rs の surface_notes と一致させること。
+
+	inbox 適用は 3 経路を用意する(コマンドカテゴリの登録先が環境で異なるため。
+	Sora 側は 3 ノートを順に送る。空 inbox への発火は無害):
+	  0x14 → Sora / Apply Next Command      (Bridge ProgramService のコマンド)
+	  0x15 → TrackEdit / Apply Sora Bridge Inbox (EditTask)
+	  0x16 → Track / Apply Sora Bridge Inbox     (EditTask、別カテゴリ候補)
+-->
+<ControlSurface>
+
+	<Controls>
+		<!-- Bridge inbox 適用トリガー -->
+		<Control name="applyService" type="trigger" options="receive"> <MidiMessage status="#90" address="#14"/> </Control>
+		<Control name="applyTask"    type="trigger" options="receive"> <MidiMessage status="#90" address="#15"/> </Control>
+		<Control name="applyTrack"   type="trigger" options="receive"> <MidiMessage status="#90" address="#16"/> </Control>
+
+		<!-- トランスポート -->
+		<Control name="playButton"    type="trigger" options="receive"> <MidiMessage status="#90" address="#18"/> </Control>
+		<Control name="stopButton"    type="trigger" options="receive"> <MidiMessage status="#90" address="#19"/> </Control>
+		<Control name="recordButton"  type="trigger" options="receive"> <MidiMessage status="#90" address="#1A"/> </Control>
+		<Control name="rewindButton"  type="trigger" options="receive"> <MidiMessage status="#90" address="#1B"/> </Control>
+		<Control name="forwardButton" type="trigger" options="receive"> <MidiMessage status="#90" address="#1C"/> </Control>
+		<Control name="rtzButton"     type="trigger" options="receive"> <MidiMessage status="#90" address="#1D"/> </Control>
+	</Controls>
+
+	<Mappings>
+		<Global>
+			<Command control="applyService" command.category="Sora"      command.name="Apply Next Command"/>
+			<Command control="applyTask"    command.category="TrackEdit" command.name="Apply Sora Bridge Inbox"/>
+			<Command control="applyTrack"   command.category="Track"     command.name="Apply Sora Bridge Inbox"/>
+
+			<Command control="playButton"    command.category="Transport" command.name="Start"/>
+			<Command control="stopButton"    command.category="Transport" command.name="Stop"/>
+			<Command control="recordButton"  command.category="Transport" command.name="Record"/>
+			<Command control="rewindButton"  command.category="Transport" command.name="Rewind"/>
+			<Command control="forwardButton" command.category="Transport" command.name="Forward"/>
+			<Command control="rtzButton"     command.category="Transport" command.name="Return to Zero"/>
+		</Global>
+	</Mappings>
+
+</ControlSurface>
