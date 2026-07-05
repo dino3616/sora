@@ -6,10 +6,11 @@
 
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 検証 3 層(L1/L2/L3)の個別エラー。全件列挙して返す(技術要件書 §4.6)。
-#[derive(Debug, Clone, Serialize)]
+/// Deserialize も導出する(Agent/テストが ErrorReport を機械読みして扱うため)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationIssue {
     /// エラー位置の JSON Pointer(例: `/sections/0/phrases/1/notes/3/pitch`)
     pub pointer: String,

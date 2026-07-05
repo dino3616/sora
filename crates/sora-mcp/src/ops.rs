@@ -154,10 +154,12 @@ fn connect(port_name: &str) -> anyhow::Result<MidiGuard> {
             ),
         }
     })?;
-    let conn = output.connect(port, "sora-out").map_err(|e| CoreError::Io {
-        path: PathBuf::from(port_name),
-        source: std::io::Error::other(e.to_string()),
-    })?;
+    let conn = output
+        .connect(port, "sora-out")
+        .map_err(|e| CoreError::Io {
+            path: PathBuf::from(port_name),
+            source: std::io::Error::other(e.to_string()),
+        })?;
     Ok(MidiGuard { conn })
 }
 
@@ -185,8 +187,8 @@ pub fn send_file(
     port_name: &str,
     interrupted: Option<&AtomicBool>,
 ) -> anyhow::Result<SendStats> {
-    let playback = plan_playback(file)
-        .with_context(|| format!("planning playback of {}", file.display()))?;
+    let playback =
+        plan_playback(file).with_context(|| format!("planning playback of {}", file.display()))?;
 
     let mut guard = connect(port_name)?;
 
@@ -194,7 +196,10 @@ pub fn send_file(
     let mut sent = 0usize;
     let mut aborted = false;
     for msg in &playback.messages {
-        if interrupted.map(|f| f.load(Ordering::SeqCst)).unwrap_or(false) {
+        if interrupted
+            .map(|f| f.load(Ordering::SeqCst))
+            .unwrap_or(false)
+        {
             aborted = true;
             break;
         }

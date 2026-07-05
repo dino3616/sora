@@ -8,5 +8,7 @@
 //! anyhow → ErrorReport の正規化は本クレートの [`report`] に一元化し、
 //! sora-cli も同じ関数を使う。運用ヘルパ([`ops`])も同様に共有する。
 
+pub mod gate;
 pub mod ops;
 pub mod report;
+pub mod server;

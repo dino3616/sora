@@ -44,11 +44,16 @@ enum Command {
     Version(commands::project::VersionCommand),
     /// 環境診断
     Doctor,
+    /// MCP サーバー(stdio。stdout はトランスポート専用)
+    #[command(subcommand)]
+    Mcp(commands::mcp::McpCommand),
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result: CmdResult = match cli.command {
+        // MCP サーバーは stdout をトランスポートに使うため、JSON 出力経路を通さない
+        Command::Mcp(cmd) => return cmd.run_blocking(),
         Command::Midi(cmd) => cmd.run(),
         Command::Audio(cmd) => cmd.run(),
         Command::Profile(cmd) => cmd.run(),

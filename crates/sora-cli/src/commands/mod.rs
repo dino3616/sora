@@ -5,6 +5,7 @@
 
 pub mod audio;
 pub mod config;
+pub mod mcp;
 pub mod midi;
 pub mod profile;
 pub mod project;
