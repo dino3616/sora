@@ -6,8 +6,7 @@
 use std::process::ExitCode as ProcExitCode;
 
 use serde::Serialize;
-use sora_audio::AudioError;
-use sora_core::error::{CoreError, ErrorReport, ExitCode};
+use sora_core::error::{ErrorReport, ExitCode};
 
 /// コマンドの実行結果。`Ok` は成功データ、`Err` は anyhow チェーン。
 pub type CmdResult = anyhow::Result<serde_json::Value>;
@@ -25,40 +24,9 @@ pub fn emit_success(value: &serde_json::Value) {
 }
 
 /// anyhow エラーを ErrorReport へ正規化して stdout に出し、終了コードを返す。
+/// 正規化は sora-mcp と共有(§6.4: CLI と MCP でエラー表現を同一に保つ)。
 pub fn emit_error(err: &anyhow::Error) -> ProcExitCode {
-    // 根本原因(最も具体的なメッセージ)を除いた context 層を chain とする。
-    let chain_without = |leaf: &str| -> Vec<String> {
-        err.chain()
-            .map(|c| c.to_string())
-            .filter(|m| m != leaf)
-            .collect()
-    };
-
-    let (report, exit) = if let Some(core) = err.downcast_ref::<CoreError>() {
-        let msg = core.to_string();
-        (
-            ErrorReport::from_core(core, chain_without(&msg)),
-            core.exit_code(),
-        )
-    } else if let Some(audio) = err.downcast_ref::<AudioError>() {
-        let msg = audio.to_string();
-        let report = ErrorReport {
-            code: audio.code().to_string(),
-            message: msg.clone(),
-            details: serde_json::Value::Null,
-            hint: audio.hint(),
-            chain: chain_without(&msg),
-        };
-        // デコード/解析系は環境要因(ファイル不正・非対応形式)として扱う
-        (report, ExitCode::Environment)
-    } else {
-        let chain: Vec<String> = err.chain().skip(1).map(|c| c.to_string()).collect();
-        (
-            ErrorReport::internal(err.to_string(), chain),
-            ExitCode::Internal,
-        )
-    };
-
+    let (report, exit) = sora_mcp::report::normalize(err);
     let wrapped = ErrorEnvelope { error: report };
     #[allow(clippy::print_stdout)]
     {

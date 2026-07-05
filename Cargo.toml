@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/sora-core", "crates/sora-audio", "crates/sora-cli"]
+members = [
+    "crates/sora-core",
+    "crates/sora-audio",
+    "crates/sora-mcp",
+    "crates/sora-cli",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +16,7 @@ repository = "https://github.com/dino3616/sora"
 [workspace.dependencies]
 sora-core = { path = "crates/sora-core" }
 sora-audio = { path = "crates/sora-audio" }
+sora-mcp = { path = "crates/sora-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1"
@@ -29,6 +35,8 @@ rand_chacha = "0.9"
 symphonia = { version = "0.5", features = ["all"] }
 ebur128 = "0.1"
 realfft = "3"
+rmcp = { version = "2", features = ["transport-io"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 
 [workspace.lints.clippy]
 # clippy::all をリポジトリ全体で常時 deny(行単位/テストでの個別 allow は可)

@@ -1,25 +1,25 @@
 [package]
-name = "sora-cli"
+name = "sora-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Sora CLI — the single-binary tool layer"
-
-[[bin]]
-name = "sora"
-path = "src/main.rs"
+description = "Sora MCP server — exposes the tool layer over MCP with control-level gating"
 
 [dependencies]
 sora-core = { workspace = true }
 sora-audio = { workspace = true }
-sora-mcp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+schemars = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
-ctrlc = { workspace = true }
+tracing = { workspace = true }
+midir = { workspace = true }
+rmcp = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use clap::Subcommand;
 use serde_json::json;
-use sora_core::error::CoreError;
 use sora_core::midi;
-use sora_core::model::{DeviceProfile, PartPlan, SoraConfig};
+use sora_core::model::PartPlan;
 use sora_core::validate::load_validated;
+use sora_mcp::ops::resolve_profile;
 
 use super::write_new_file;
 use crate::output::CmdResult;
@@ -160,44 +160,4 @@ impl DecompileArgs {
         }
         Ok(json!({ "plan": output.plan, "summary": output.summary }))
     }
-}
-
-/// Profile を解決する。--profile 明示があればそれを、なければ config 経由で。
-fn resolve_profile(
-    device_id: &str,
-    profile: Option<&Path>,
-    config: Option<&Path>,
-) -> anyhow::Result<DeviceProfile> {
-    if let Some(path) = profile {
-        return Ok(load_validated(path)?);
-    }
-    let config_path = config.unwrap_or_else(|| Path::new("sora.config.json"));
-    let cfg: SoraConfig = load_validated(config_path).with_context(|| {
-        format!(
-            "no --profile given and could not read config {} to resolve device `{}`",
-            config_path.display(),
-            device_id
-        )
-    })?;
-    let entry = cfg
-        .devices
-        .iter()
-        .find(|d| d.id == device_id)
-        .ok_or_else(|| CoreError::Validation {
-            issues: vec![sora_core::error::ValidationIssue {
-                pointer: "/device".to_string(),
-                code: "DEVICE_NOT_IN_CONFIG".to_string(),
-                message: format!(
-                    "device `{device_id}` not found in {}",
-                    config_path.display()
-                ),
-                hint: Some(
-                    "sora.config.json の devices に追加するか --profile で明示してください"
-                        .to_string(),
-                ),
-            }],
-        })?;
-    // profile パスは config からの相対
-    let base = config_path.parent().unwrap_or_else(|| Path::new("."));
-    Ok(load_validated(&base.join(&entry.profile))?)
 }
