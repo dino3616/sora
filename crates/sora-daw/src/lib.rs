@@ -15,5 +15,6 @@
 pub mod adapter;
 pub mod error;
 pub mod generic;
+pub mod merge;
 pub mod studio_one;
 pub mod types;

@@ -12,9 +12,13 @@
 //! | suggest_plugin_settings | Profile 参照 + settings.json 生成 | 提案のみ | 1 |
 //! | analyze_audio | audio analyze / compare | read-only | 1 |
 //! | send_midi | midi send | 実時間送信 | 2 |
+//! | read_daw_project | daw read(§11.3) | read-only(DAW 接続) | 3 |
+//! | daw_transport | daw transport | 再生位置・録音状態の変更 | 4 |
+//! | write_clip | daw write-clip | DAW プロジェクト変更 | 4 |
+//! | write_automation | automation apply | DAW プロジェクト変更 | 4 |
+//! | render_stem | daw render | CPU 負荷・ファイル生成 | 5 |
 //!
-//! DAW 統合系ツール(read_daw_project / write_clip 等、level 3+)は
-//! Milestone 5 の sora-daw アダプタ実装後に追加する。
+//! level 4+ の書き込みは WriteReceipt(undo 情報)を actions.jsonl に記録する(§11.4)。
 
 use std::path::{Path, PathBuf};
 
@@ -30,8 +34,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sora_core::error::{CoreError, ValidationIssue};
 use sora_core::midi;
-use sora_core::model::PartPlan;
+use sora_core::model::{AutomationPlan, PartPlan, SoraConfig};
 use sora_core::validate::parse_validated;
+use sora_daw::adapter::DawAdapter;
+use sora_daw::types::{RenderRequest, TransportCmd, WriteClipRequest};
 
 use crate::{gate, ops, report};
 
@@ -61,7 +67,8 @@ impl SoraMcp {
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
-            tool_router: Self::tool_router(),
+            // 基本ツール(level 0-2)+ DAW 統合ツール(level 3-5)
+            tool_router: Self::tool_router() + Self::daw_tool_router(),
         }
     }
 
@@ -237,6 +244,54 @@ pub struct SendMidiParams {
     /// 出力ポート名(部分一致。省略時は sora.config.json の midi.port_name)
     #[serde(default)]
     pub port: Option<String>,
+}
+
+/// read_daw_project のパラメータ。
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ReadDawProjectParams {
+    /// 読み取る .song のパス(省略時は sora.config.json の daw.studio_one.song_path)
+    #[serde(default)]
+    pub song: Option<String>,
+}
+
+/// daw_transport のパラメータ。
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DawTransportParams {
+    /// トランスポート操作
+    pub cmd: TransportCmd,
+}
+
+/// write_clip のパラメータ。
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WriteClipParams {
+    /// 配置する SMF ファイルのパス
+    pub file: String,
+    /// 配置先トラックのヒント
+    #[serde(default)]
+    pub track: Option<String>,
+    /// アダプタの明示指定("generic" でファイル書き出しへ切替。省略時は config の daw.name から解決)
+    #[serde(default)]
+    pub adapter: Option<String>,
+}
+
+/// write_automation のパラメータ。
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WriteAutomationParams {
+    /// Automation Plan(schemas/automation-plan.schema.json に従う JSON オブジェクト)
+    pub plan: Value,
+    /// アダプタの明示指定("generic" で手動適用手順書の生成へ切替)
+    #[serde(default)]
+    pub adapter: Option<String>,
+}
+
+/// render_stem のパラメータ。
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RenderStemParams {
+    /// 出力先パス
+    pub out: String,
+    /// 対象トラック(省略時はミックス全体)
+    #[serde(default)]
+    pub track: Option<String>,
 }
 
 #[tool_router]
@@ -582,7 +637,170 @@ impl SoraMcp {
     }
 }
 
+#[tool_router(router = daw_tool_router)]
 impl SoraMcp {
+    /// DAW プロジェクト状態を読み取り、project-context への反映提案を返す(level 3)。
+    #[tool(
+        name = "read_daw_project",
+        description = "DAW プロジェクト状態(BPM/拍子/トラック/マーカー)を読み取り、project-context.json への反映提案(fill/conflict/add)を返す。Studio One は最後に保存された .song のオフライン読解。反映は提案を確認のうえ Agent が行う(衝突は両論併記)。control level 3 が必要。"
+    )]
+    pub async fn read_daw_project(
+        &self,
+        params: Parameters<ReadDawProjectParams>,
+    ) -> CallToolResult {
+        let p = params.0;
+        let args = json!({ "song": p.song });
+        self.run_tool("read_daw_project", 3, args, || {
+            let mut config = self.load_config();
+            if let Some(song) = &p.song {
+                set_song_path(&mut config, &self.resolve(song));
+            }
+            let mut adapter = sora_daw::studio_one::StudioOneAdapter::new(
+                &self.root,
+                config.as_ref(),
+            );
+            let state = adapter.read_project()?;
+            let context: Option<sora_core::model::ProjectContext> =
+                sora_core::validate::load_validated(&self.root.join("project-context.json")).ok();
+            let suggestions = sora_daw::merge::merge_suggestions(context.as_ref(), &state);
+            Ok(json!({
+                "state": state,
+                "merge_suggestions": suggestions,
+                "note": "project-context.json への反映は提案を確認のうえ行う(confidence: daw、衝突は両論併記。§11.3)",
+            }))
+        })
+    }
+
+    /// DAW のトランスポートを制御する(level 4)。
+    #[tool(
+        name = "daw_transport",
+        description = "DAW のトランスポート(play/stop/record/rewind/forward/return-to-zero)を制御する。Studio One は Sora Surface(仮想 MIDI)経由で一方向送信のため verified は false。control level 4 が必要。"
+    )]
+    pub async fn daw_transport(&self, params: Parameters<DawTransportParams>) -> CallToolResult {
+        let p = params.0;
+        let args = json!({ "cmd": p.cmd.as_str() });
+        self.run_tool("daw_transport", 4, args, || {
+            let state = self.adapter(None).transport(p.cmd)?;
+            Ok(serde_json::to_value(state)?)
+        })
+    }
+
+    /// MIDI クリップを DAW へ配置する(level 4)。
+    #[tool(
+        name = "write_clip",
+        description = "MIDI クリップを DAW へ配置する。Studio One は .song の事前バックアップ(§11.4)→ Bridge inbox キュー → Sora Surface トリガーの順で実行し、WriteReceipt(undo 手順付き)を返す。generic アダプタは exports/daw-import/ への書き出し + 手動インポート手順。control level 4 が必要。"
+    )]
+    pub async fn write_clip(&self, params: Parameters<WriteClipParams>) -> CallToolResult {
+        let p = params.0;
+        let args = json!({ "file": p.file, "track": p.track, "adapter": p.adapter });
+        self.run_tool("write_clip", 4, args, || {
+            let receipt = self
+                .adapter(p.adapter.as_deref())
+                .write_clip(WriteClipRequest {
+                    midi_file: self.resolve(&p.file),
+                    track_hint: p.track.clone(),
+                })?;
+            // §11.4: undo 情報を actions.jsonl に残す
+            ops::record_action(
+                &self.root,
+                "write_clip.receipt",
+                serde_json::to_value(&receipt)?,
+            );
+            Ok(serde_json::to_value(receipt)?)
+        })
+    }
+
+    /// Automation Plan を DAW へ適用する(level 4)。
+    #[tool(
+        name = "write_automation",
+        description = "Automation Plan(JSON)を検証して DAW へ適用する。Studio One の自動適用経路は未検証のため未対応(DAW_NOT_SUPPORTED)。adapter=\"generic\" で手動適用手順書(Markdown)の生成に切り替えられる。control level 4 が必要。"
+    )]
+    pub async fn write_automation(
+        &self,
+        params: Parameters<WriteAutomationParams>,
+    ) -> CallToolResult {
+        let p = params.0;
+        let args = json!({
+            "target": p.plan.get("target").cloned().unwrap_or(Value::Null),
+            "adapter": p.adapter,
+        });
+        self.run_tool("write_automation", 4, args, || {
+            let plan: AutomationPlan = parse_validated(&p.plan)?;
+            let receipt = self.adapter(p.adapter.as_deref()).write_automation(&plan)?;
+            // §11.4: undo 情報を actions.jsonl に残す
+            ops::record_action(
+                &self.root,
+                "write_automation.receipt",
+                serde_json::to_value(&receipt)?,
+            );
+            Ok(serde_json::to_value(receipt)?)
+        })
+    }
+
+    /// ステム/ミックスをレンダリングする(level 5)。
+    #[tool(
+        name = "render_stem",
+        description = "DAW にステム/ミックスのレンダリングを要求する。現行アダプタは未対応(DAW_NOT_SUPPORTED: 手動レンダリング + analyze_audio を案内)。control level 5 が必要。"
+    )]
+    pub async fn render_stem(&self, params: Parameters<RenderStemParams>) -> CallToolResult {
+        let p = params.0;
+        let args = json!({ "out": p.out, "track": p.track });
+        self.run_tool("render_stem", 5, args, || {
+            let receipt = self.adapter(None).render(RenderRequest {
+                track: p.track.clone(),
+                out: self.resolve(&p.out),
+            })?;
+            ops::record_action(
+                &self.root,
+                "render_stem.receipt",
+                serde_json::to_value(&receipt)?,
+            );
+            Ok(serde_json::to_value(receipt)?)
+        })
+    }
+}
+
+/// config の daw.studio_one.song_path を明示パスで上書きする(read_daw_project の song 指定)。
+fn set_song_path(config: &mut Option<SoraConfig>, song: &Path) {
+    let cfg = config.get_or_insert_with(|| SoraConfig {
+        schema_version: "1.0".to_string(),
+        daw: None,
+        control_level: 1,
+        devices: vec![],
+        preferences: None,
+        midi: None,
+        paths: None,
+    });
+    let daw = cfg.daw.get_or_insert_with(|| sora_core::model::DawInfo {
+        name: "Studio One".to_string(),
+        version: None,
+        os: None,
+        studio_one: None,
+    });
+    daw.studio_one
+        .get_or_insert_with(Default::default)
+        .song_path = Some(song.to_string_lossy().to_string());
+}
+
+impl SoraMcp {
+    /// config を読む(壊れていても None に倒す)。
+    fn load_config(&self) -> Option<SoraConfig> {
+        sora_core::validate::load_validated(&self.config_path()).ok()
+    }
+
+    /// DAW アダプタを解決する(明示指定 > config の daw.name > generic)。
+    fn adapter(&self, name: Option<&str>) -> Box<dyn DawAdapter> {
+        let config = self.load_config();
+        match name {
+            Some("generic") => Box::new(sora_daw::generic::GenericFileAdapter::new(&self.root)),
+            Some("studio-one") => Box::new(sora_daw::studio_one::StudioOneAdapter::new(
+                &self.root,
+                config.as_ref(),
+            )),
+            _ => sora_daw::adapter::resolve_adapter(&self.root, config.as_ref()),
+        }
+    }
+
     /// 送信ポートを解決する(明示指定 > sora.config.json の midi.port_name)。
     fn resolve_port(&self, port: Option<String>) -> anyhow::Result<String> {
         if let Some(p) = port {

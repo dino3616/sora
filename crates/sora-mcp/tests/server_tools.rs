@@ -209,3 +209,138 @@ async fn analyze_project_aggregates_config_and_artifacts() {
         json!(["devices/test-guitar.profile.json"])
     );
 }
+
+// ---------------------------------------------------------------------------
+// DAW 統合ツール(level 3-5、技術要件書 §8, §11)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn write_clip_is_rejected_below_level_4() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 3);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    let result = server
+        .write_clip(Parameters(sora_mcp::server::WriteClipParams {
+            file: "exports/riff.mid".to_string(),
+            track: None,
+            adapter: Some("generic".to_string()),
+        }))
+        .await;
+    assert_eq!(result.is_error, Some(true));
+    let value = structured(&result);
+    assert_eq!(value["error"]["code"], "CONTROL_LEVEL_REQUIRED");
+    assert_eq!(value["error"]["details"]["required_level"], 4);
+}
+
+#[tokio::test]
+async fn write_clip_generic_exports_with_receipt_and_undo() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 4);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    // まず compose で .mid を作る
+    let compose = server
+        .compose_part(Parameters(ComposePartParams {
+            plan: minimal_plan("clip-src", "palm_mute"),
+            profile_path: None,
+            out: None,
+        }))
+        .await;
+    assert_ne!(compose.is_error, Some(true));
+
+    let result = server
+        .write_clip(Parameters(sora_mcp::server::WriteClipParams {
+            file: "exports/clip-src.mid".to_string(),
+            track: Some("bass".to_string()),
+            adapter: Some("generic".to_string()),
+        }))
+        .await;
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let receipt = structured(&result);
+    assert_eq!(receipt["status"], "exported");
+    assert!(!receipt["undo"].as_array().unwrap().is_empty());
+    let exported = receipt["files"][0].as_str().unwrap();
+    assert!(exported.contains("daw-import"));
+    assert!(Path::new(exported).is_file());
+
+    // §11.4: レシートが actions.jsonl に記録されている
+    let log = std::fs::read_to_string(dir.path().join("logs/actions.jsonl")).unwrap();
+    assert!(log.contains("write_clip.receipt"));
+}
+
+#[tokio::test]
+async fn write_automation_generic_generates_instructions() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 4);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    let plan = json!({
+        "schema_version": "1.0",
+        "target": { "track": "bass", "device": "test-guitar", "parameter": "drive" },
+        "unit": "%",
+        "points": [
+            { "at": "1.1.000", "value": 20.0 },
+            { "at": "5.1.000", "value": 65.0, "curve": "smooth" }
+        ],
+        "rationale": "サビへ向けて歪みを増やす"
+    });
+    let result = server
+        .write_automation(Parameters(sora_mcp::server::WriteAutomationParams {
+            plan,
+            adapter: Some("generic".to_string()),
+        }))
+        .await;
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let receipt = structured(&result);
+    assert_eq!(receipt["status"], "exported");
+    let doc_path = receipt["files"][0].as_str().unwrap();
+    let doc = std::fs::read_to_string(doc_path).unwrap();
+    assert!(doc.contains("drive"));
+    assert!(doc.contains("5.1.000"));
+}
+
+#[tokio::test]
+async fn render_stem_reports_not_supported_with_fallback() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 5);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    let result = server
+        .render_stem(Parameters(sora_mcp::server::RenderStemParams {
+            out: "exports/mix.wav".to_string(),
+            track: None,
+        }))
+        .await;
+    assert_eq!(result.is_error, Some(true));
+    let value = structured(&result);
+    assert_eq!(value["error"]["code"], "DAW_NOT_SUPPORTED");
+    assert!(
+        value["error"]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("analyze_audio")
+    );
+}
+
+#[tokio::test]
+async fn read_daw_project_without_song_path_guides_setup() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 3);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    let result = server
+        .read_daw_project(Parameters(sora_mcp::server::ReadDawProjectParams {
+            song: None,
+        }))
+        .await;
+    assert_eq!(result.is_error, Some(true));
+    let value = structured(&result);
+    assert_eq!(value["error"]["code"], "DAW_NOT_CONNECTED");
+    assert!(
+        value["error"]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("song_path")
+    );
+}

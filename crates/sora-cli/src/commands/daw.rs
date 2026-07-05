@@ -121,7 +121,7 @@ impl ReadArgs {
         // CLI は差分の提案(fill = 空欄を埋める / conflict = 両論併記が必要)まで。
         let context: Option<sora_core::model::ProjectContext> =
             load_validated(&self.common.root.join("project-context.json")).ok();
-        let suggestions = merge_suggestions(context.as_ref(), &state);
+        let suggestions = sora_daw::merge::merge_suggestions(context.as_ref(), &state);
 
         record_action(
             &self.common.root,
@@ -146,54 +146,6 @@ fn minimal_config() -> SoraConfig {
         midi: None,
         paths: None,
     }
-}
-
-/// project-context.json への反映提案を作る(機械処理のみ。判断は Agent)。
-fn merge_suggestions(
-    context: Option<&sora_core::model::ProjectContext>,
-    state: &sora_daw::types::DawProjectState,
-) -> Vec<serde_json::Value> {
-    let mut suggestions = Vec::new();
-    let current_bpm = context.and_then(|c| c.bpm);
-    match (current_bpm, state.bpm) {
-        (None, Some(daw)) => suggestions.push(json!({
-            "field": "bpm", "action": "fill", "daw_value": daw, "confidence": "daw"
-        })),
-        (Some(cur), Some(daw)) if (cur - daw).abs() > 0.01 => suggestions.push(json!({
-            "field": "bpm", "action": "conflict", "current": cur, "daw_value": daw,
-            "note": "手動記述と DAW 由来が衝突。上書きせず両論併記し、ユーザーに確認する"
-        })),
-        _ => {}
-    }
-    let current_ts = context.and_then(|c| c.time_signature.clone());
-    match (current_ts, state.time_signature.clone()) {
-        (None, Some(daw)) => suggestions.push(json!({
-            "field": "time_signature", "action": "fill", "daw_value": daw, "confidence": "daw"
-        })),
-        (Some(cur), Some(daw)) if cur != daw => suggestions.push(json!({
-            "field": "time_signature", "action": "conflict", "current": cur, "daw_value": daw,
-            "note": "手動記述と DAW 由来が衝突。上書きせず両論併記し、ユーザーに確認する"
-        })),
-        _ => {}
-    }
-    // context の tracks に無い DAW トラックを列挙
-    let known: Vec<String> = context
-        .map(|c| {
-            c.tracks
-                .iter()
-                .map(|t| t.id.to_lowercase().replace(['-', '_'], " "))
-                .collect()
-        })
-        .unwrap_or_default();
-    for track in &state.tracks {
-        let name = track.name.to_lowercase().replace(['-', '_'], " ");
-        if !name.is_empty() && !known.iter().any(|k| k == &name) {
-            suggestions.push(json!({
-                "field": "tracks", "action": "add", "daw_value": track,
-            }));
-        }
-    }
-    suggestions
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
