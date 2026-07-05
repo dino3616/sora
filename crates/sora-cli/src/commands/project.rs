@@ -185,20 +185,26 @@ fn append_changelog(root: &Path, label: &str, files: &[String]) -> anyhow::Resul
     Ok(())
 }
 
-/// 環境診断(§5)。
+/// 環境診断(§5)。仮想 MIDI ポート(IAC Driver / loopMIDI)の検出を含む(§9)。
 pub fn doctor() -> CmdResult {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let config_path = cwd.join("sora.config.json");
     let config_present = config_path.exists();
 
-    let control_level = if config_present {
+    let config = if config_present {
         std::fs::read_to_string(&config_path)
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("control_level").and_then(|l| l.as_u64()))
     } else {
         None
     };
+    let control_level = config
+        .as_ref()
+        .and_then(|v| v.get("control_level").and_then(|l| l.as_u64()));
+    let configured_port = config
+        .as_ref()
+        .and_then(|v| v.pointer("/midi/port_name").and_then(|p| p.as_str()))
+        .map(String::from);
 
     let missing_dirs: Vec<&str> = PROJECT_DIRS
         .iter()
@@ -213,9 +219,40 @@ pub fn doctor() -> CmdResult {
         "config_present": config_present,
         "control_level": control_level,
         "missing_directories": missing_dirs,
+        "midi": doctor_midi(configured_port),
         "notes": [
-            "control level 2+ の仮想 MIDI 送信は Milestone 4 で対応予定",
             "DAW 統合は Milestone 5 で対応予定"
         ]
     }))
+}
+
+/// 仮想 MIDI 送信経路の診断(§9)。ポートの自動作成はせず、手順を提示する。
+fn doctor_midi(configured_port: Option<String>) -> serde_json::Value {
+    let ports = sora_mcp::ops::list_output_ports().unwrap_or_default();
+    let configured_port_found = configured_port
+        .as_deref()
+        .map(|name| ports.iter().any(|p| p.contains(name)));
+
+    // 仮想 MIDI の代表的なポート名で検出(macOS: IAC / Windows: loopMIDI)
+    let virtual_port_present = ports
+        .iter()
+        .any(|p| p.contains("IAC") || p.to_lowercase().contains("loopmidi"));
+
+    let hint = match (std::env::consts::OS, virtual_port_present) {
+        ("macos", false) => Some(
+            "仮想 MIDI ポートが見つかりません。Audio MIDI 設定 → ウィンドウ → MIDI スタジオ → IAC ドライバ を開き、「装置はオンライン」を有効化してください。作成後、sora.config.json の midi.port_name にポート名を設定します",
+        ),
+        ("windows", false) => Some(
+            "仮想 MIDI ポートが見つかりません。loopMIDI をインストールしてポートを作成し、sora.config.json の midi.port_name に設定してください",
+        ),
+        _ => None,
+    };
+
+    json!({
+        "output_ports": ports,
+        "virtual_port_present": virtual_port_present,
+        "configured_port": configured_port,
+        "configured_port_found": configured_port_found,
+        "hint": hint,
+    })
 }
