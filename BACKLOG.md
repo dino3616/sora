@@ -18,7 +18,7 @@
 - M3: sora-audio(loudness/spectrum/compare)、AutomationPlan スキーマ、genre-targets ✅(残: tone/master ワークフロー doc)
 - 次の大物: **M4 MCP サーバー + 仮想 MIDI(midir)**。実装は自己完結だが実機ルーティング確認に IAC Driver 設定が要る。
 
-**M4 実装完了(実機ルーティング確認除く)。** MCP サーバー(rmcp 2.x, `sora mcp serve`)+ control level ゲート + actions.jsonl + doctor の仮想 MIDI 検出まで実装・テスト済み。次の大物: **M5 sora-daw(DawAdapter + Studio One アダプタ)**。
+**M4 実装完了(実機ルーティング確認除く)/ M5 実装完了(Studio One 実機検証除く)。** sora-daw クレート(DawAdapter + Generic + Studio One アダプタ)、`sora daw` / `sora automation` CLI、MCP の DAW ツール(level 3-5)、Note Selector まで実装・テスト済み。残りはユーザーの実機セットアップ(Sora Surface 有効化・トリガー結合検証)と M6。
 
 ## 実環境メモ(ユーザー PC・実態確認可能)
 
@@ -127,16 +127,19 @@ sora-cli:
   - **別アングル調査(Fable)**: 純正 ATOM スクリプトが MIDI イベントから `interpretCommand` を実行している実例を確認 → **Sora Surface(MIDI トリガー式サーフェス)でトリガーを OS 非依存化できる**。UCNET は proprietary で行き止まり、`.song` ホットリロードも不可と確認。
   - **動作要件の明文化(§3.2)を受けた方針**: AppleScript は macOS 限定オプション(ダイアログ自動化)に隔離。コアトリガーは仮想 MIDI(全 OS)。
   - Codex 成果物: `~/Documents/Codex/2026-07-05/cl/outputs/`(検証レポート・Bridge プロトタイプ・インストーラ)。**Sora 作業ディレクトリ外**。M5 実装時にこれを参照実装として Rust 化する。
-- [ ] 【要検証】Sora Surface(MIDI トリガー)→ EditTask/interpretCommand の結合(部品ごとの実証は済み。§11.2.1)
-- [ ] sora-daw クレート: DawAdapter trait + DawCapabilities + DawError(§11.1)
-- [ ] Generic(file-based)アダプタ(常設フォールバック)
-- [ ] Studio One アダプタ: Sora Surface / MCU(仮想 MIDI)で trigger/transport/automation + Bridge 拡張(EditTask)で構造編集(§11.2.1)
-- [ ] `sora daw setup studio-one`(Bridge 拡張 + Sora Surface の冪等インストール + doctor、Codex の install スクリプトを Rust 化)
-- [ ] REAPER 参照アダプタ(OSC + ReaScript、§11.2)※抽象の妥当性確認用。REAPER は無料評価版で検証可
-- [ ] `sora daw probe/read/transport/write-clip` / `sora automation apply` / `sora daw render`
-- [ ] 書き込み前バックアップ + WriteReceipt(§11.4)
-- [ ] selection ケイパビリティ(「これ」の決定的参照、§11.3)
-- [ ] 【要ユーザー】Studio One 再起動(拡張導入時)+ 環境設定で Sora Surface 有効化(初回のみ)。macOS 限定オプション使用時のみ Accessibility 権限
+- [x] sora-daw クレート: DawAdapter trait + DawCapabilities + DawError(§11.1)
+- [x] Generic(file-based)アダプタ(常設フォールバック): write_clip = exports/daw-import/ 配置 + 手順、write_automation = 手動適用手順書(Markdown)
+- [x] Studio One アダプタ(§11.2.1): .song オフライン読解(BPM/拍子/トラック/マーカー。実サンプルで BPM 123 / 9 トラック読解確認)+ Bridge inbox/outbox キュー + Sora Surface(純 XML サーフェス。nanoKONTROL 2 実例と同じ `<Command>` マッピング)への仮想 MIDI トリガー
+- [x] `sora daw setup studio-one`(Bridge 拡張 + Sora Surface の冪等インストール/--check/--uninstall。設定ファイルは必ずバックアップ。Codex インストーラの Rust 化)
+- [x] `sora daw probe/read/transport/write-clip/render` / `sora automation apply`(CLI にも control level ゲート適用: probe/read/setup=3, transport/write/automation=4, render=5)
+- [x] MCP ツール追加: read_daw_project / daw_transport / write_clip / write_automation / render_stem(計 13 ツール。stdio 疎通確認済み)
+- [x] 書き込み前バックアップ + WriteReceipt(§11.4。song_path の .song を versions/daw-backups/ へコピー、取れなければ書き込み拒否。レシートを actions.jsonl に記録)
+- [x] selection ケイパビリティ → **Note Selector で代替**(§11.3 更新済み)。Studio One に選択状態の取得経路が無いため、bars/section/pitch_min/pitch_max/note_indices の AND 結合セレクタを実装し、apply_articulations が対応(「Verse セクションの C2 以下」等の自然言語指定を Agent が翻訳)
+- [x] daw read は project-context への直接書き込みをせず fill/conflict/add の反映提案を返す(§11.3 の両論併記は Agent の仕事)
+- [~] REAPER 参照アダプタ → **スコープ外(2026-07-05 ユーザー判断)**。抽象の妥当性は Generic + Studio One + モックテストで確認
+- [ ] 【要検証・要ユーザー】Sora Surface(MIDI トリガー)→ コマンド発火の結合(§11.2.1 で唯一未検証の結合部)。手順: (1) `sora config set control-level 3` 以上 → `sora daw setup studio-one` 実行(2) Studio One 再起動(3) Audio MIDI 設定で IAC ポート(例: "Sora Trigger")作成(4) Studio One 環境設定 > 外部デバイス に「Sora | Sora Surface」を追加し受信ポート割当(5) config の daw.studio_one.trigger_port 設定 → `sora daw transport stop` で反応確認
+- [ ] 【要検証】EditTask コマンドカテゴリの特定: Sora Surface は Sora/TrackEdit/Track の 3 経路にマッピング済み(0x14-0x16)。どれが効くかは実機で確認し、不要な経路は後で削る
+- [ ] 【残】Studio One の write_automation(マップ済みパラメータの MIDI CC 経路、要検証)と render(§11.2.1 未検証)。当面は generic フォールバック / 手動
 
 ## Milestone 6: 制作コパイロット(§15 M6)
 
@@ -159,3 +162,6 @@ sora-cli:
 - 2026-07-04: リポジトリは dino3616/sora・Public、gh auth で作成(ユーザー回答)
 - 2026-07-04: タスク管理は BACKLOG.md(本ファイル)で行う(Linear は不使用)
 - 2026-07-04: 実 DAW は Studio One 5 と判明。M5 の調査対象を Studio One に設定、参照実装は REAPER のまま
+- 2026-07-05: REAPER 参照アダプタはスコープ外(ユーザー指示)。selection 非対応の代替として Note Selector(自然言語範囲指定の構造化)を実装(ユーザー指示、§11.3 に明文化)
+- 2026-07-05: `sora daw setup` の要求 control level は 3 とした(DAW 統合を有効化する環境セットアップ。読み取り系と同格)。--check は無変更のためゲート外(実装判断。異論あれば変更可)
+- 2026-07-05: CLI の `midi send` には control level ゲート未適用のまま(M4 実装時の挙動を維持)。§5 の表では level 2 のため、適用するか要ユーザー確認
