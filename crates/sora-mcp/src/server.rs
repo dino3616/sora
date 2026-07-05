@@ -647,6 +647,7 @@ fn apply_edits(plan: &mut PartPlan, edits: &[ArticulationEdit]) -> anyhow::Resul
 impl ServerHandler for SoraMcp {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
+        info.server_info = rmcp::model::Implementation::new("sora", env!("CARGO_PKG_VERSION"));
         info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info.instructions = Some(
             "Sora — 音楽制作のための接続されたプロダクションレイヤー。\
