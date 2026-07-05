@@ -123,18 +123,20 @@ sora-cli:
 
 - [x] 【調査完了 2026-07-05】Studio One 5 の制御経路を実機調査(§11.2.1 に確定事項を記載)。Claude Code レートリミット中に Codex が主に検証、Fable が別アングル調査で補強。
   - **確定**: 公式 AppleScript 辞書・公開 API は無い。だが内部 JS SDK(`musicdevices.bundle/.../sdk/*.d.ts`)+ MCU コントロールサーフェス + 拡張機構が使える。
-  - **実機検証済み(Codex)**: Sora Bridge 拡張(`EditTask`)+ AppleScript メニュー実行で、開いたままの GUI に MIDI インポート/コマンドを反映できる。
-  - **別アングル調査(Fable)**: MCU 経由(仮想 MIDI)なら Accessibility 非依存で transport/マップ済みパラメータ automation が可能 = Bridge の弱点を補完する第一候補。UCNET は proprietary で行き止まり、`.song` ホットリロードも不可と確認。
+  - **実機検証済み(Codex)**: Sora Bridge 拡張(`EditTask`)経由で、開いたままの GUI に MIDI インポート/コマンドを反映できる(初回検証時のトリガーは AppleScript)。
+  - **別アングル調査(Fable)**: 純正 ATOM スクリプトが MIDI イベントから `interpretCommand` を実行している実例を確認 → **Sora Surface(MIDI トリガー式サーフェス)でトリガーを OS 非依存化できる**。UCNET は proprietary で行き止まり、`.song` ホットリロードも不可と確認。
+  - **動作要件の明文化(§3.2)を受けた方針**: AppleScript は macOS 限定オプション(ダイアログ自動化)に隔離。コアトリガーは仮想 MIDI(全 OS)。
   - Codex 成果物: `~/Documents/Codex/2026-07-05/cl/outputs/`(検証レポート・Bridge プロトタイプ・インストーラ)。**Sora 作業ディレクトリ外**。M5 実装時にこれを参照実装として Rust 化する。
+- [ ] 【要検証】Sora Surface(MIDI トリガー)→ EditTask/interpretCommand の結合(部品ごとの実証は済み。§11.2.1)
 - [ ] sora-daw クレート: DawAdapter trait + DawCapabilities + DawError(§11.1)
 - [ ] Generic(file-based)アダプタ(常設フォールバック)
-- [ ] Studio One アダプタ: MCU(仮想 MIDI)で transport/automation + Bridge 拡張で write_clip(§11.2.1)
-- [ ] `sora daw setup studio-one`(Bridge 拡張の冪等インストール + doctor、Codex の install スクリプトを Rust 化)
+- [ ] Studio One アダプタ: Sora Surface / MCU(仮想 MIDI)で trigger/transport/automation + Bridge 拡張(EditTask)で構造編集(§11.2.1)
+- [ ] `sora daw setup studio-one`(Bridge 拡張 + Sora Surface の冪等インストール + doctor、Codex の install スクリプトを Rust 化)
 - [ ] REAPER 参照アダプタ(OSC + ReaScript、§11.2)※抽象の妥当性確認用。REAPER は無料評価版で検証可
 - [ ] `sora daw probe/read/transport/write-clip` / `sora automation apply` / `sora daw render`
 - [ ] 書き込み前バックアップ + WriteReceipt(§11.4)
 - [ ] selection ケイパビリティ(「これ」の決定的参照、§11.3)
-- [ ] 【要ユーザー】macOS Accessibility 権限付与(Bridge 経路)/ Studio One 再起動(拡張導入時)
+- [ ] 【要ユーザー】Studio One 再起動(拡張導入時)+ 環境設定で Sora Surface 有効化(初回のみ)。macOS 限定オプション使用時のみ Accessibility 権限
 
 ## Milestone 6: 制作コパイロット(§15 M6)
 
