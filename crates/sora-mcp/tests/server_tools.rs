@@ -344,3 +344,115 @@ async fn read_daw_project_without_song_path_guides_setup() {
             .contains("song_path")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Note Selector(§11.3: selection 非対応アダプタの自然言語範囲指定フォールバック)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn apply_articulations_selects_by_section_and_pitch() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 1);
+    // project-context に verse = 1..2 小節を定義
+    std::fs::write(
+        dir.path().join("project-context.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": "1.0",
+            "sections": [
+                { "label": "verse", "start_bar": 1, "end_bar": 2 },
+                { "label": "chorus", "start_bar": 3, "end_bar": 4 }
+            ],
+            "tracks": [],
+            "user_notes": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    // 2 小節目(verse 内)と 3 小節目(chorus 内)にノートを持つ Plan
+    let plan = json!({
+        "schema_version": "1.0",
+        "part_id": "selector-src",
+        "device": "test-guitar",
+        "bpm": 120.0,
+        "time_signature": "4/4",
+        "sections": [{
+            "label": "all",
+            "start_bar": 1,
+            "phrases": [{
+                "notes": [
+                    { "pitch": "E1", "start": "1.1.000", "duration": "0.1.000", "velocity": 100 },
+                    { "pitch": "G3", "start": "2.1.000", "duration": "0.1.000", "velocity": 100 },
+                    { "pitch": "E1", "start": "3.1.000", "duration": "0.1.000", "velocity": 100 }
+                ]
+            }]
+        }]
+    });
+    let compose = server
+        .compose_part(Parameters(ComposePartParams {
+            plan,
+            profile_path: None,
+            out: None,
+        }))
+        .await;
+    assert_ne!(compose.is_error, Some(true), "{compose:?}");
+
+    // 「verse セクションの E1 以下」→ 1 ノートのみ(2 小節目の G3 は音高で除外、
+    // 3 小節目の E1 はセクション範囲外)。edits は wire 形式(flatten)で渡す
+    let params: sora_mcp::server::ApplyArticulationsParams = serde_json::from_value(json!({
+        "file": "exports/selector-src.mid",
+        "device": "test-guitar",
+        "part_id": "selector-out",
+        "edits": [
+            { "articulation": "palm_mute", "section": "verse", "pitch_max": "E1" }
+        ]
+    }))
+    .unwrap();
+    let result = server.apply_articulations(Parameters(params)).await;
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let value = structured(&result);
+    assert_eq!(value["edited_notes"], 1);
+
+    // 生成 Plan で対象ノートのみに articulation が付いている
+    let plan_out: Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.path().join("exports/selector-out.plan.json")).unwrap(),
+    )
+    .unwrap();
+    let notes = plan_out["sections"][0]["phrases"][0]["notes"]
+        .as_array()
+        .unwrap();
+    assert_eq!(notes[0]["articulation"], "palm_mute");
+    assert!(notes[1].get("articulation").is_none() || notes[1]["articulation"].is_null());
+}
+
+#[tokio::test]
+async fn apply_articulations_reports_unknown_section() {
+    let dir = tempfile::tempdir().unwrap();
+    setup_project(dir.path(), 1);
+    let server = SoraMcp::new(dir.path().to_path_buf());
+
+    let compose = server
+        .compose_part(Parameters(ComposePartParams {
+            plan: minimal_plan("sec-src", "palm_mute"),
+            profile_path: None,
+            out: None,
+        }))
+        .await;
+    assert_ne!(compose.is_error, Some(true));
+
+    let params: sora_mcp::server::ApplyArticulationsParams = serde_json::from_value(json!({
+        "file": "exports/sec-src.mid",
+        "device": "test-guitar",
+        "edits": [ { "articulation": "palm_mute", "section": "bridge" } ]
+    }))
+    .unwrap();
+    let result = server.apply_articulations(Parameters(params)).await;
+    assert_eq!(result.is_error, Some(true));
+    let value = structured(&result);
+    assert_eq!(value["error"]["code"], "VALIDATION_FAILED");
+    assert_eq!(
+        value["error"]["details"]["issues"][0]["code"],
+        "UNKNOWN_SECTION"
+    );
+}

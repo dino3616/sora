@@ -161,17 +161,16 @@ pub struct ComposePartParams {
     pub out: Option<String>,
 }
 
-/// apply_articulations の 1 編集。bars か note_indices のどちらかで対象を指定する。
+/// apply_articulations の 1 編集。対象は Note Selector(§11.3)で指定する:
+/// bars / section / note_indices / pitch_min / pitch_max の AND 結合。
+/// 「Verse セクションの C2 以下」のような自然言語指定を Agent がこの形へ翻訳する。
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ArticulationEdit {
     /// 奏法 ID(Device Profile の keyswitches の articulation)
     pub articulation: String,
-    /// 対象小節範囲 [start, end](1 始まり・両端含む)
-    #[serde(default)]
-    pub bars: Option<[u32; 2]>,
-    /// 対象ノートの通し番号(decompile 結果の時間順 0 始まり)
-    #[serde(default)]
-    pub note_indices: Option<Vec<usize>>,
+    /// 対象ノートの選択条件(AND 結合。最低 1 条件が必要)
+    #[serde(flatten)]
+    pub selector: sora_core::select::NoteSelector,
 }
 
 /// apply_articulations のパラメータ。
@@ -398,7 +397,7 @@ impl SoraMcp {
     /// 既存 SMF に奏法注釈を付けて再コンパイルする(level 1)。
     #[tool(
         name = "apply_articulations",
-        description = "既存 SMF を Part Plan へ逆コンパイルし、指定範囲のノートへ奏法(articulation)を付与して新しい .mid へ再コンパイルする。元ファイルは変更しない。"
+        description = "既存 SMF を Part Plan へ逆コンパイルし、Note Selector で選んだノートへ奏法(articulation)を付与して新しい .mid へ再コンパイルする。元ファイルは変更しない。対象指定は bars(小節範囲)/ section(project-context の sections ラベル)/ pitch_min・pitch_max(音名境界。Profile の octave_convention 基準)/ note_indices の AND 結合 — 「Verse セクションの C2 以下」のような自然言語の範囲指定はこの形に翻訳する(§11.3)。"
     )]
     pub async fn apply_articulations(
         &self,
@@ -418,7 +417,14 @@ impl SoraMcp {
             });
             let decompiled = midi::decompile_file(&file, &profile, &part_id)?;
             let mut plan: PartPlan = parse_validated(&decompiled.plan)?;
-            let edited = apply_edits(&mut plan, &p.edits)?;
+            // Note Selector の解決材料: project-context の sections と Profile の音名基準
+            let context_sections = sora_core::validate::load_validated::<
+                sora_core::model::ProjectContext,
+            >(&self.root.join("project-context.json"))
+            .map(|c| c.sections)
+            .unwrap_or_default();
+            let convention = sora_core::profile::ResolvedProfile::resolve(&profile)?.convention;
+            let edited = apply_edits(&mut plan, &p.edits, &context_sections, convention)?;
 
             let output = midi::compile(&plan, &profile)?;
             let out_path = p
@@ -817,46 +823,33 @@ impl SoraMcp {
 }
 
 /// 奏法編集を Plan に適用し、編集したノート数を返す。
-/// 対象指定(bars / note_indices)に合致するノートが無い編集はエラーにする
+/// 対象解決は Note Selector(§11.3)。合致 0 件・条件なしはエラーにする
 /// (黙って何もしないと Agent が成功と誤認するため)。
-fn apply_edits(plan: &mut PartPlan, edits: &[ArticulationEdit]) -> anyhow::Result<usize> {
+fn apply_edits(
+    plan: &mut PartPlan,
+    edits: &[ArticulationEdit],
+    context_sections: &[sora_core::model::SectionInfo],
+    convention: sora_core::types::OctaveConvention,
+) -> anyhow::Result<usize> {
+    use anyhow::Context as _;
     let mut total = 0usize;
     for (ei, edit) in edits.iter().enumerate() {
-        if edit.bars.is_none() && edit.note_indices.is_none() {
-            anyhow::bail!("edits[{ei}]: bars か note_indices のどちらかで対象を指定してください");
-        }
-        let mut hit = 0usize;
+        let matched =
+            sora_core::select::select_notes(plan, &edit.selector, context_sections, convention)
+                .with_context(|| format!("resolving edits[{ei}]"))?;
+        let targets: std::collections::HashSet<usize> = matched.iter().copied().collect();
         let mut index = 0usize;
         for section in &mut plan.sections {
             for phrase in &mut section.phrases {
                 for note in &mut phrase.notes {
-                    let by_index = edit
-                        .note_indices
-                        .as_ref()
-                        .is_some_and(|xs| xs.contains(&index));
-                    let by_bar = edit.bars.is_some_and(|[start, end]| {
-                        note.start
-                            .split('.')
-                            .next()
-                            .and_then(|b| b.parse::<u32>().ok())
-                            .is_some_and(|bar| bar >= start && bar <= end)
-                    });
-                    if by_index || by_bar {
+                    if targets.contains(&index) {
                         note.articulation = Some(edit.articulation.clone());
-                        hit += 1;
                     }
                     index += 1;
                 }
             }
         }
-        if hit == 0 {
-            anyhow::bail!(
-                "edits[{ei}]: 対象ノートが見つかりません(bars={:?}, note_indices={:?}。ノート総数 {index})",
-                edit.bars,
-                edit.note_indices
-            );
-        }
-        total += hit;
+        total += matched.len();
     }
     Ok(total)
 }
@@ -915,16 +908,28 @@ mod tests {
         }
     }
 
+    use sora_core::select::NoteSelector;
+    use sora_core::types::OctaveConvention;
+
+    fn edit(articulation: &str, selector: NoteSelector) -> ArticulationEdit {
+        ArticulationEdit {
+            articulation: articulation.to_string(),
+            selector,
+        }
+    }
+
     #[test]
     fn apply_edits_by_bar_range() {
         let mut plan = plan_with_notes(&["1.1.000", "1.3.000", "2.1.000", "3.1.000"]);
-        let edits = vec![ArticulationEdit {
-            articulation: "palm_mute".to_string(),
-            bars: Some([1, 2]),
-            note_indices: None,
-        }];
+        let edits = vec![edit(
+            "palm_mute",
+            NoteSelector {
+                bars: Some([1, 2]),
+                ..Default::default()
+            },
+        )];
         #[allow(clippy::unwrap_used)]
-        let edited = apply_edits(&mut plan, &edits).unwrap();
+        let edited = apply_edits(&mut plan, &edits, &[], OctaveConvention::C3Is60).unwrap();
         assert_eq!(edited, 3);
         let notes = &plan.sections[0].phrases[0].notes;
         assert_eq!(notes[0].articulation.as_deref(), Some("palm_mute"));
@@ -935,13 +940,15 @@ mod tests {
     #[test]
     fn apply_edits_by_note_index() {
         let mut plan = plan_with_notes(&["1.1.000", "1.3.000"]);
-        let edits = vec![ArticulationEdit {
-            articulation: "pinch_harmonic".to_string(),
-            bars: None,
-            note_indices: Some(vec![1]),
-        }];
+        let edits = vec![edit(
+            "pinch_harmonic",
+            NoteSelector {
+                note_indices: Some(vec![1]),
+                ..Default::default()
+            },
+        )];
         #[allow(clippy::unwrap_used)]
-        let edited = apply_edits(&mut plan, &edits).unwrap();
+        let edited = apply_edits(&mut plan, &edits, &[], OctaveConvention::C3Is60).unwrap();
         assert_eq!(edited, 1);
         let notes = &plan.sections[0].phrases[0].notes;
         assert_eq!(notes[0].articulation, None);
@@ -949,24 +956,39 @@ mod tests {
     }
 
     #[test]
+    fn apply_edits_by_pitch_bound_within_section() {
+        // 「A セクションの E2 以下」(全ノート E2 なので全て合致)
+        let mut plan = plan_with_notes(&["1.1.000", "2.1.000"]);
+        let edits = vec![edit(
+            "palm_mute",
+            NoteSelector {
+                section: Some("A".to_string()),
+                pitch_max: Some(sora_core::types::NoteSpec::Name("E2".to_string())),
+                ..Default::default()
+            },
+        )];
+        #[allow(clippy::unwrap_used)]
+        let edited = apply_edits(&mut plan, &edits, &[], OctaveConvention::C3Is60).unwrap();
+        assert_eq!(edited, 2);
+    }
+
+    #[test]
     fn apply_edits_rejects_no_target() {
         let mut plan = plan_with_notes(&["1.1.000"]);
-        let edits = vec![ArticulationEdit {
-            articulation: "palm_mute".to_string(),
-            bars: None,
-            note_indices: None,
-        }];
-        assert!(apply_edits(&mut plan, &edits).is_err());
+        let edits = vec![edit("palm_mute", NoteSelector::default())];
+        assert!(apply_edits(&mut plan, &edits, &[], OctaveConvention::C3Is60).is_err());
     }
 
     #[test]
     fn apply_edits_rejects_no_match() {
         let mut plan = plan_with_notes(&["1.1.000"]);
-        let edits = vec![ArticulationEdit {
-            articulation: "palm_mute".to_string(),
-            bars: Some([5, 6]),
-            note_indices: None,
-        }];
-        assert!(apply_edits(&mut plan, &edits).is_err());
+        let edits = vec![edit(
+            "palm_mute",
+            NoteSelector {
+                bars: Some([5, 6]),
+                ..Default::default()
+            },
+        )];
+        assert!(apply_edits(&mut plan, &edits, &[], OctaveConvention::C3Is60).is_err());
     }
 }

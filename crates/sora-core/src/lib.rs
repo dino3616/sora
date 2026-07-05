@@ -14,5 +14,6 @@ pub mod midi;
 pub mod model;
 pub mod profile;
 pub mod schema;
+pub mod select;
 pub mod types;
 pub mod validate;
