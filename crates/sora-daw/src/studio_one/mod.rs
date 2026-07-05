@@ -31,12 +31,13 @@ const ADAPTER: &str = "studio-one";
 
 /// Sora Surface のノートマップ(assets/studio-one/Sora Surface.surface.xml と一致させる)。
 /// ノート番号はチャンネル 1(status 0x90)。
+///
+/// 実機検証済み(2026-07-05): Transport Start/Stop の発火と Bridge inbox の
+/// 消化を確認。EditTask のコマンドカテゴリは `Track`(`TrackEdit` は存在せず削除済み)。
 pub mod surface_notes {
-    /// Bridge inbox 処理: Sora Bridge サービスコマンド経由
+    /// Bridge inbox 処理: Sora Bridge サービスコマンド経由(Sora / Apply Next Command)
     pub const APPLY_VIA_SERVICE: u8 = 0x14;
-    /// Bridge inbox 処理: EditTask コマンド経由(カテゴリ TrackEdit)
-    pub const APPLY_VIA_TASK: u8 = 0x15;
-    /// Bridge inbox 処理: EditTask コマンド経由(カテゴリ Track)
+    /// Bridge inbox 処理: EditTask コマンド経由(Track / Apply Sora Bridge Inbox)
     pub const APPLY_VIA_TRACK: u8 = 0x16;
     /// Transport: Start
     pub const PLAY: u8 = 0x18;
@@ -52,10 +53,10 @@ pub mod surface_notes {
     pub const RETURN_TO_ZERO: u8 = 0x1D;
 }
 
-/// Bridge inbox 処理を試す 3 経路(すべて送る。空 inbox への発火は無害)。
-pub const APPLY_NOTE_SEQUENCE: [u8; 3] = [
+/// Bridge inbox 処理を試す 2 経路(両方送る。空 inbox への発火は無害)。
+/// サービスコマンドは常時有効、EditTask はソングが開いているときに有効。
+pub const APPLY_NOTE_SEQUENCE: [u8; 2] = [
     surface_notes::APPLY_VIA_SERVICE,
-    surface_notes::APPLY_VIA_TASK,
     surface_notes::APPLY_VIA_TRACK,
 ];
 
@@ -209,6 +210,51 @@ impl StudioOneAdapter {
         }
         self.bridge().wait_consumed(queued, self.bridge_timeout)
     }
+
+    /// inbox に溜まっているリクエストの処理をトリガーし、消化状況を返す。
+    /// 曲を変更しない Bridge 結合の検証(§11.2.1 の要検証項目)にも使う。
+    pub fn apply_inbox(&self) -> Result<ApplyInboxReport, DawError> {
+        let port = self.trigger_port()?.to_string();
+        let bridge = self.bridge();
+        let before = bridge.pending_requests();
+        trigger::send_notes(&port, &APPLY_NOTE_SEQUENCE).map_err(|e| DawError::NotConnected {
+            adapter: ADAPTER.to_string(),
+            hint: format!(
+                "仮想 MIDI ポート `{port}` へ送信できません: {e}。`sora doctor` でポートを確認してください"
+            ),
+        })?;
+        // 全件消化(inbox が空になる)か、タイムアウトまで待つ
+        let start = std::time::Instant::now();
+        while start.elapsed() < self.bridge_timeout && !bridge.pending_requests().is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+        let after = bridge.pending_requests();
+        Ok(ApplyInboxReport {
+            route: format!(
+                "Sora Surface notes {:#04X?} via `{port}`",
+                APPLY_NOTE_SEQUENCE
+            ),
+            pending_before: before.len(),
+            pending_after: after.len(),
+            consumed: before.len().saturating_sub(after.len()),
+            pending: after,
+        })
+    }
+}
+
+/// `apply_inbox` の結果。
+#[derive(Debug, serde::Serialize)]
+pub struct ApplyInboxReport {
+    /// トリガーの送達経路
+    pub route: String,
+    /// トリガー前の未処理リクエスト数
+    pub pending_before: usize,
+    /// トリガー後(タイムアウト時点)の未処理リクエスト数
+    pub pending_after: usize,
+    /// 消化されたリクエスト数
+    pub consumed: usize,
+    /// 未処理のまま残っているリクエスト
+    pub pending: Vec<PathBuf>,
 }
 
 impl DawAdapter for StudioOneAdapter {

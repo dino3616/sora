@@ -30,6 +30,8 @@ pub enum DawCommand {
     WriteClip(WriteClipArgs),
     /// ステム/ミックスのレンダリング要求(level 5)
     Render(RenderArgs),
+    /// Bridge inbox の未処理リクエストの適用をトリガーする(level 4。曲は変更しない)
+    ApplyInbox(RootArgs),
     /// DAW 統合のセットアップ(Bridge 拡張 + Sora Surface の冪等インストール)
     #[command(subcommand)]
     Setup(SetupCommand),
@@ -43,6 +45,7 @@ impl DawCommand {
             DawCommand::Transport(a) => a.run(),
             DawCommand::WriteClip(a) => a.run(),
             DawCommand::Render(a) => a.run(),
+            DawCommand::ApplyInbox(a) => a.run_apply_inbox(),
             DawCommand::Setup(c) => c.run(),
         }
     }
@@ -80,6 +83,19 @@ impl RootArgs {
             "resolved_adapter": resolved.name(),
             "adapters": adapter::probe_all(&self.root, config.as_ref()),
         }))
+    }
+
+    fn run_apply_inbox(self) -> CmdResult {
+        gate::require(&self.root, "daw_apply_inbox", 4)?;
+        let config = self.config();
+        let adapter = StudioOneAdapter::new(&self.root, config.as_ref());
+        let report = adapter.apply_inbox()?;
+        record_action(
+            &self.root,
+            "daw.apply_inbox",
+            serde_json::to_value(&report)?,
+        );
+        Ok(serde_json::to_value(report)?)
     }
 }
 

@@ -137,8 +137,10 @@ sora-cli:
 - [x] selection ケイパビリティ → **Note Selector で代替**(§11.3 更新済み)。Studio One に選択状態の取得経路が無いため、bars/section/pitch_min/pitch_max/note_indices の AND 結合セレクタを実装し、apply_articulations が対応(「Verse セクションの C2 以下」等の自然言語指定を Agent が翻訳)
 - [x] daw read は project-context への直接書き込みをせず fill/conflict/add の反映提案を返す(§11.3 の両論併記は Agent の仕事)
 - [~] REAPER 参照アダプタ → **スコープ外(2026-07-05 ユーザー判断)**。抽象の妥当性は Generic + Studio One + モックテストで確認
-- [ ] 【要検証・要ユーザー】Sora Surface(MIDI トリガー)→ コマンド発火の結合(§11.2.1 で唯一未検証の結合部)。手順: (1) `sora config set control-level 3` 以上 → `sora daw setup studio-one` 実行(2) Studio One 再起動(3) Audio MIDI 設定で IAC ポート(例: "Sora Trigger")作成(4) Studio One 環境設定 > 外部デバイス に「Sora | Sora Surface」を追加し受信ポート割当(5) config の daw.studio_one.trigger_port 設定 → `sora daw transport stop` で反応確認
-- [ ] 【要検証】EditTask コマンドカテゴリの特定: Sora Surface は Sora/TrackEdit/Track の 3 経路にマッピング済み(0x14-0x16)。どれが効くかは実機で確認し、不要な経路は後で削る
+- [x] 【実機検証完了 2026-07-05】Sora Surface(MIDI トリガー)→ コマンド発火の結合。`sora daw setup studio-one` → Studio One 再起動 → IAC「Sora Trigger」ポート作成 → 外部デバイスに Sora Surface 追加(受信元 = Sora Trigger)で、(a) Transport Play/Stop の発火(再生ヘッド移動を目視確認)、(b) Bridge inbox 消化(apply-inbox で consumed=1、dump_command の outbox 出力)を確認
+- [x] 【実機確認 2026-07-05】EditTask コマンドカテゴリ = `Track`(`TrackEdit` は null)。Bridge ProgramService のコマンド `Sora / Apply Next Command` の登録も確認(dump_command による)。dead 経路 0x15 は削除済み
+- [x] `sora daw apply-inbox`(Bridge キューのトリガー + 消化確認。曲を変更しない結合検証・運用コマンド)
+- [ ] 【残・任意】write_clip の E2E(開いているソングへの MIDI インポート)。保存済み .song(song_path)が前提。Import File のダイアログ挙動の確認を含む
 - [ ] 【残】Studio One の write_automation(マップ済みパラメータの MIDI CC 経路、要検証)と render(§11.2.1 未検証)。当面は generic フォールバック / 手動
 
 ## Milestone 6: 制作コパイロット(§15 M6)
@@ -165,3 +167,5 @@ sora-cli:
 - 2026-07-05: REAPER 参照アダプタはスコープ外(ユーザー指示)。selection 非対応の代替として Note Selector(自然言語範囲指定の構造化)を実装(ユーザー指示、§11.3 に明文化)
 - 2026-07-05: `sora daw setup` の要求 control level は 3 とした(DAW 統合を有効化する環境セットアップ。読み取り系と同格)。--check は無変更のためゲート外(実装判断。異論あれば変更可)
 - 2026-07-05: CLI の `midi send` には control level ゲート未適用のまま(M4 実装時の挙動を維持)。§5 の表では level 2 のため、適用するか要ユーザー確認
+- 2026-07-05: 実機構成が確定: IAC「バス1」= 演奏プレビュー(midi.port_name、Sora IAC キーボードデバイスが受信)/ IAC「Sora Trigger」= コマンドトリガー(daw.studio_one.trigger_port、Sora Surface が受信)。**同居禁止**(キースイッチ C#0 = 0x19 = Stop が衝突するため)
+- 2026-07-05: M4 の残タスクだった IAC Driver 有効化も完了(バス1 + Sora Trigger の 2 ポート構成)
