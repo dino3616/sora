@@ -18,7 +18,7 @@
 - M3: sora-audio(loudness/spectrum/compare)、AutomationPlan スキーマ、genre-targets ✅(残: tone/master ワークフロー doc)
 - 次の大物: **M4 MCP サーバー + 仮想 MIDI(midir)**。実装は自己完結だが実機ルーティング確認に IAC Driver 設定が要る。
 
-**M4 仮想 MIDI まで完了。実 Device Profile を2つ作成(H7S 実機確認済み / Ozone 9 は Web ドキュメント読解のみ)。次: MCP サーバー(rmcp)。**
+**M4 実装完了(実機ルーティング確認除く)。** MCP サーバー(rmcp 2.x, `sora mcp serve`)+ control level ゲート + actions.jsonl + doctor の仮想 MIDI 検出まで実装・テスト済み。次の大物: **M5 sora-daw(DawAdapter + Studio One アダプタ)**。
 
 ## 実環境メモ(ユーザー PC・実態確認可能)
 
@@ -111,13 +111,13 @@ sora-cli:
 
 - [x] `sora midi send` / `sora midi panic`(midir + RAII オールノートオフ、§9)
 - [x] plan_playback(テンポ解決・純粋関数・テスト済)
-- [ ] sora-mcp クレート(rmcp + tokio)、`sora mcp serve` ← **次の大物**
-- [ ] control level ゲート(全ツールに要求 level、超過拒否 + 有効化案内)
-- [ ] actions.jsonl を MCP 実行系にも適用(CLI 側の record_action は実装済)
-- [ ] doctor 拡張(IAC Driver 検出)
-- [ ] 【要ユーザー】IAC Driver 有効化 + Studio One 5 でのルーティング確認
-- [ ] doctor 拡張(IAC Driver 検出・セットアップ案内)
-- [ ] 【要ユーザー】IAC Driver 有効化 + Studio One 5 でのルーティング確認
+- [x] sora-mcp クレート(rmcp 2.x + tokio)、`sora mcp serve`(stdio、level 0-2 の 8 ツール公開。DAW 系 level 3+ は M5 で追加)
+- [x] control level ゲート(全ツールに要求 level、超過は実行前拒否 + 有効化案内。config set は MCP 非公開)
+- [x] actions.jsonl を MCP 実行系にも適用(拒否・エラーも記録。ops::record_action を CLI と共有)
+- [x] doctor 拡張(仮想 MIDI ポート検出・IAC/loopMIDI セットアップ案内)
+- [x] エラー表現の CLI/MCP 同一性を結合テストで保証(§6.4。report::normalize を共有)
+- [ ] 【要ユーザー】IAC Driver 有効化 + Studio One 5 でのルーティング確認(doctor が手順を提示)
+- [ ] 【要ユーザー】Claude Code / Codex への MCP サーバー登録(`sora mcp serve --root <音楽プロジェクト>`)→ UC1 の E2E 確認(M4 受け入れ基準)
 
 ## Milestone 5: DAW 統合(§15 M5)
 
